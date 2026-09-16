@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# The standalone bundle contains intentional whitespace inside JS string literals.
+dist/index.html linguist-generated=true whitespace=-blank-at-eol

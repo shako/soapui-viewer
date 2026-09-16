@@ -1,0 +1,24 @@
+{
+  "name": "soapui-viewer",
+  "version": "1.0.0",
+  "description": "Offline viewer for searching large SoapUI XML projects across suites, cases, steps and scripts.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shako/soapui-viewer.git"
+  },
+  "engines": { "node": ">=22" },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "saxes": "6.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "fake-indexeddb": "6.2.5"
+  }
+}

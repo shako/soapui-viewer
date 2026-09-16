@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+*.log
+private-projects/
+
+# Local tooling and configuration, not part of the distributed viewer.
+.openai/
+.codex/
+.agents/
+.env
+.env.*
+
+# Keep customer exports, recordings and credentials out of this public repo.
+*.xml
+*.mp4
+*.MP4
+*.mov
+*.pem
+*.key
+*.p12
+*.pfx
