@@ -21,7 +21,7 @@ const kindNames = { project: 'Project', suite: 'Test suite', case: 'Test case', 
 const icons = { project: 'P', suite: 'S', case: 'C', step: '›_' };
 const state = {
   nodes: new Map(), roots: [], hits: {}, rows: [], selected: null,
-  query: '', caseSensitive: false, expanded: new Set(), collapsed: new Set(), contextCases: new Set(),
+  query: '', caseSensitive: false, scope: 'all', expanded: new Set(), collapsed: new Set(), contextCases: new Set(),
   importing: false,
 };
 let requestId = 0;
@@ -187,7 +187,7 @@ function rpc(action, data = {}) {
   });
 }
 
-function highlight(text, query = state.query) {
+function highlight(text, query = (state.scope === 'all' || state.scope === 'name') ? state.query : '') {
   const fragment = document.createDocumentFragment();
   const regex = matcher(query, state.caseSensitive);
   let previous = 0;
@@ -268,24 +268,27 @@ async function runSearch() {
   const ticket = ++searchTicket;
   const query = $('search').value;
   const caseSensitive = $('case-sensitive').checked;
+  const scope = $('search-scope').value;
   if (state.roots.length) $('search-summary').textContent = 'Searching all projects…';
   const started = performance.now();
-  const result = await rpc('search', { query, caseSensitive });
+  const result = await rpc('search', { query, caseSensitive, scope });
   if (ticket !== searchTicket) return;
-  const changed = state.query !== query || state.caseSensitive !== caseSensitive;
+  const changed = state.query !== query || state.caseSensitive !== caseSensitive || state.scope !== scope;
   state.query = query;
   state.caseSensitive = caseSensitive;
+  state.scope = scope;
   state.hits = result.hits;
   if (changed) {
     state.collapsed.clear();
     state.contextCases.clear();
     $('tree').scrollTop = 0;
   }
+  const foundIn = Object.entries(result.matchingKinds).map(([kind, count]) => `${format(count)} ${kind}${count === 1 ? '' : 's'}`).join(' · ');
   $('search-summary').textContent = !state.roots.length
     ? 'Open your projects to search names and content.'
     : query
-      ? `${format(result.occurrences)} ${result.occurrences === 1 ? 'match' : 'matches'} in ${format(result.matchingNodes)} ${result.matchingNodes === 1 ? 'item' : 'items'} · ${format(state.roots.length)} ${state.roots.length === 1 ? 'project' : 'projects'} searched · ${Math.round(performance.now() - started)} ms`
-      : 'All items are visible. Search names, scripts, requests, properties and other content.';
+      ? `${format(result.occurrences)} ${result.occurrences === 1 ? 'match' : 'matches'} · Found in: ${foundIn} · ${format(state.roots.length)} ${state.roots.length === 1 ? 'project' : 'projects'} searched · ${Math.round(performance.now() - started)} ms`
+      : 'All items are visible. Enter a search term to filter them.';
   refreshRows();
   if (!state.rows.some(row => row.id === state.selected)) {
     state.selected = (state.rows.find(row => state.hits[row.id]?.own) || state.rows[0])?.id ?? null;
@@ -360,7 +363,7 @@ function renderTree() {
     row.append(arrow, icon, identity);
     if (node.disabled) row.append(el('span', 'disabled-label', 'disabled'));
     if (state.query && hit?.own) {
-      const label = hit.name && hit.content ? 'name + content' : hit.name ? 'name' : 'content';
+      const label = [hit.name && 'name', hit.properties && 'properties', hit.content && 'content'].filter(Boolean).join(' + ');
       row.append(el('span', 'hit-kind', label));
     }
     if (state.query && hit?.total) {
@@ -414,7 +417,7 @@ async function renderDetail() {
     if (!state.roots.length) detail.replaceChildren(welcome);
     else {
       const empty = el('div', 'welcome');
-      empty.append(el('h2', '', 'No matches found'), el('p', '', 'Try a shorter search term or turn off case-sensitive search.'));
+      empty.append(el('h2', '', 'No matches found'), el('p', '', 'Try a shorter search term, choose All text, or turn off case-sensitive search.'));
       detail.replaceChildren(empty);
     }
     return;
@@ -453,7 +456,7 @@ async function renderDetail() {
     detail.append(context);
   }
   detail.append(body);
-  const fields = await rpc('detail', { nodeId: node.id, query: state.query, caseSensitive: state.caseSensitive });
+  const fields = await rpc('detail', { nodeId: node.id, query: state.query, caseSensitive: state.caseSensitive, scope: state.scope });
   if (ticket !== detailTicket) return;
   // Keep the worker's field indices intact; only the displayed order changes.
   const orderedFields = state.query ? [...fields].sort((a, b) => b.count - a.count || a.index - b.index) : fields;
@@ -491,7 +494,7 @@ async function renderDetail() {
     activeField = fields[fieldIndex];
     fieldSelect.classList.toggle('has-matches', !!state.query && activeField.count > 0);
     if (!Object.keys(page).length && activeField.count) page = { matchIndex: 0 };
-    const result = await rpc('field', { nodeId: node.id, fieldIndex, query: state.query, caseSensitive: state.caseSensitive, page });
+    const result = await rpc('field', { nodeId: node.id, fieldIndex, query: state.query, caseSensitive: state.caseSensitive, scope: state.scope, page });
     if (ticket !== detailTicket || thisFieldTicket !== fieldTicket) return;
     const toolbar = el('div', 'code-toolbar');
     toolbar.append(el('span', '', `From text line ${format(result.line)} · ${format(result.length)} ${result.length === 1 ? 'character' : 'characters'}`));
@@ -588,6 +591,7 @@ $('search').addEventListener('input', () => {
   searchTimer = setTimeout(() => runSearch().catch(error => reportError(error.message)), 180);
 });
 $('case-sensitive').addEventListener('change', () => runSearch().catch(error => reportError(error.message)));
+$('search-scope').addEventListener('change', () => runSearch().catch(error => reportError(error.message)));
 $('clear-projects').addEventListener('click', async () => {
   await rpc('clear');
   state.nodes.clear();
@@ -682,7 +686,7 @@ if (document.modelContext?.registerTool) {
   Promise.resolve(document.modelContext.registerTool({
     name: 'search_open_soapui_projects',
     title: 'Search open SoapUI projects',
-    description: 'Filter the visible project tree by a literal search term in names and content. Only searches files the user has already opened.',
+    description: 'Filter the visible project tree by a literal search term using the current Search in filter. Only searches files the user has already opened.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     async execute(input) {

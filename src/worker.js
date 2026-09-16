@@ -14,15 +14,15 @@ async function handle({ id, action, ...data }) {
       for (const node of project.nodes) nodes.set(node.id, node);
       result = { rootId: project.rootId, nodes: project.nodes.map(({ fields, ...node }) => node) };
     } else if (action === 'search') {
-      result = searchNodes([...nodes.values()], data.query, data.caseSensitive);
+      result = searchNodes([...nodes.values()], data.query, data.caseSensitive, data.scope);
     } else if (action === 'detail') {
       const node = nodes.get(data.nodeId);
       if (!node) throw new Error('This item is no longer open.');
-      result = describeNode(node, data.query, data.caseSensitive);
+      result = describeNode(node, data.query, data.caseSensitive, data.scope);
     } else if (action === 'field') {
       const field = nodes.get(data.nodeId)?.fields[data.fieldIndex];
       if (!field) throw new Error('This field is no longer available.');
-      result = fieldPage(field, data.query, data.caseSensitive, data.page);
+      result = fieldPage(field, data.query, data.caseSensitive, data.page, data.scope);
     } else if (action === 'clear') {
       nodes.clear();
       result = true;

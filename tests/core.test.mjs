@@ -34,6 +34,7 @@ test('each match belongs to its own suite, case or step, with ancestor totals on
   assert.equal(result.hits[caseNode.id].total, 7);
   assert.equal(result.occurrences, 8);
   assert.equal(result.matchingNodes, 3);
+  assert.deepEqual(result.matchingKinds, { project: 1, suite: 1, case: 1, step: 2 });
   assert.equal(result.hits[nodes[0].id].total, result.occurrences);
   const scriptField = script.fields.find(field => field.label.endsWith('script'));
   assert.ok(scriptField.value.includes('${Fetch CRL#Response}'));
@@ -97,6 +98,7 @@ test('multiple projects with identical names retain separate paths and totals', 
   const result = searchNodes(nodes, 'CRL');
   assert.equal(new Set(nodes.map(node => node.id)).size, nodes.length);
   assert.equal(result.occurrences, 16);
+  assert.deepEqual(result.matchingKinds, { project: 2, suite: 2, case: 2, step: 4 });
   assert.equal(result.hits['one-0'].total, 8);
   assert.equal(result.hits['two-0'].total, 8);
 });
@@ -120,7 +122,8 @@ test('filtered tree keeps ancestors and reveals only requested case context', ()
 
 test('name-only suite match does not imply a match in every descendant', () => {
   const { nodes, rootId } = example();
-  const { hits } = searchNodes(nodes, 'Certificate validation', true);
+  const { hits, matchingKinds } = searchNodes(nodes, 'Certificate validation', true);
+  assert.deepEqual(matchingKinds, { project: 1, suite: 1, case: 0, step: 0 });
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
   const rows = visibleRows([rootId], nodeMap, hits, true, new Set(), new Set(), new Set());
   assert.equal(rows.length, 2);
@@ -160,4 +163,73 @@ test('HTML-like content stays text in the parser and is never evaluated', () => 
   assert.equal(nodes[1].name, '<img src=x onerror=alert(1)>');
   assert.ok(nodes[1].fields.at(-1).value.includes('</script>'));
   assert.equal(searchNodes(nodes, 'CRL').occurrences, 1);
+});
+
+test('search summary reports zero matching branches when nothing matches or the search is cleared', () => {
+  const { nodes } = example();
+  for (const query of ['', 'no-such-value']) {
+    assert.deepEqual(searchNodes(nodes, query).matchingKinds, { project: 0, suite: 0, case: 0, step: 0 });
+  }
+  assert.deepEqual(searchNodes([], 'CRL').matchingKinds, { project: 0, suite: 0, case: 0, step: 0 });
+});
+
+const scopedProject = () => parse(`<c:soapui-project xmlns:c="http://eviware.com/soapui/config" name="Project CRL">
+  <c:properties><c:property><c:name>CRL endpoint</c:name><c:value>crl-url</c:value></c:property></c:properties>
+  <c:testSuite name="Suite CRL"><c:testCase name="Case">
+    <c:properties><c:property><c:name>Setting</c:name><c:value>CRL</c:value></c:property></c:properties>
+    <c:testStep name="Step CRL" type="groovy"><c:config>
+      <c:script><![CDATA[log.info 'CRL']]></c:script>
+      <payload xmlns="urn:request"><properties><property><name>CRL payload</name><value>CRL payload value</value></property></properties></payload>
+      <c:assertion name="CRL assertion"/>
+    </c:config></c:testStep>
+    <c:testStep name="Property bag" type="properties" disabled="true"><c:config><c:properties>
+      <c:property><c:name>CRL key</c:name><c:value>CRL CRL</c:value></c:property>
+    </c:properties></c:config></c:testStep>
+  </c:testCase></c:testSuite>
+</c:soapui-project>`);
+
+test('name, property and content filters partition hits without counting repeated occurrences as extra branches', () => {
+  const { nodes } = scopedProject();
+  const results = Object.fromEntries(['all', 'name', 'property', 'content'].map(scope => [scope, searchNodes(nodes, 'CRL', false, scope)]));
+  assert.equal(results.all.occurrences, 13);
+  assert.equal(results.name.occurrences, 3);
+  assert.equal(results.property.occurrences, 6);
+  assert.equal(results.content.occurrences, 4);
+  assert.equal(results.all.occurrences, results.name.occurrences + results.property.occurrences + results.content.occurrences);
+  for (const scope of ['name', 'property', 'content']) {
+    assert.deepEqual(results[scope].matchingKinds, { project: 1, suite: 1, case: 1, step: 1 });
+  }
+  const script = nodes.find(node => node.name === 'Step CRL');
+  const properties = nodes.find(node => node.name === 'Property bag');
+  assert.equal(results.property.hits[script.id].own, 0, 'Request XML property elements are content');
+  assert.equal(results.property.hits[properties.id].own, 3, 'Disabled property steps are still searchable');
+  assert.equal(results.content.hits[properties.id].own, 0);
+  assert.equal(searchNodes(nodes, 'crl', true, 'property').occurrences, 1);
+  assert.equal(searchNodes(nodes, 'crl', true, 'name').occurrences, 0);
+});
+
+test('field counts and highlight pages obey the scope while keeping excluded content available for context', () => {
+  const { nodes } = scopedProject();
+  for (const scope of ['all', 'name', 'property', 'content']) {
+    const result = searchNodes(nodes, 'CRL', false, scope);
+    for (const node of nodes) {
+      const fields = describeNode(node, 'CRL', false, scope);
+      assert.equal(fields.reduce((sum, field) => sum + field.count, 0), result.hits[node.id].own);
+      for (const field of fields) {
+        const page = fieldPage(node.fields[field.index], 'CRL', false, { matchIndex: 0 }, scope);
+        assert.equal(page.total, field.count);
+        assert.equal(page.marks.length, field.count);
+        assert.equal(page.text, node.fields[field.index].value);
+      }
+    }
+  }
+});
+
+test('properties are recognized in namespace-free exports without treating nested request payloads as properties', () => {
+  const { nodes } = parse(`<soapui-project name="Project"><properties><property><name>CRL</name><value>CRL</value></property></properties>
+    <testSuite name="Suite"><testCase name="Case"><testStep name="Step"><config>
+      <payload><properties><property><name>CRL</name></property></properties></payload>
+    </config></testStep></testCase></testSuite></soapui-project>`);
+  assert.equal(searchNodes(nodes, 'CRL', false, 'property').occurrences, 2);
+  assert.equal(searchNodes(nodes, 'CRL', false, 'content').occurrences, 1);
 });

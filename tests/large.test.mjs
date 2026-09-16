@@ -30,6 +30,7 @@ test('streams two projects larger than 23 MB and finds matches across 24,000 ste
   assert.equal(nodes.filter(node => node.kind === 'step').length, 24000);
   assert.equal(result.occurrences, 2400);
   assert.equal(result.matchingNodes, 2400);
+  assert.deepEqual(result.matchingKinds, { project: 2, suite: 80, case: 2400, step: 2400 });
   assert.equal(result.hits[first.rootId].total, 1200);
   assert.equal(result.hits[second.rootId].total, 1200);
   assert.ok(progressCalls > 90);

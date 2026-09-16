@@ -14,11 +14,15 @@ De interface is in het Engels. De onderstaande knopnamen komen overeen met de vi
 4. Selecteer een onderdeel. Rechts zie je het volledige pad, het bronbestand en de velden waarin de term voorkomt. Selecteer bijvoorbeeld `config / script` voor een Groovy-script.
 5. Gebruik **Show all … steps** om ook de stappen zonder match in die testcase te zien. Die blijven selecteerbaar voor context. Met **Include fields without matches** bekijk je de overige inhoud van een onderdeel.
 
+Met **Search in** beperk je de zoekactie tot **All text**, **Names** (namen van projecten, suites, cases en steps), **Properties** (custom propertynamen en -waarden op projecten, suites, cases en in stepconfiguraties) of **Content** (scripts, requests en overige velden, behalve die namen en properties). De boom, aantallen en markeringen volgen dezelfde filter. Andere velden blijven bereikbaar via **Include fields without matches**.
+
 In de keuzelijst **Content** staan tijdens het zoeken de velden met de meeste matches bovenaan, met het aantal vóór de veldnaam. Velden met en zonder matches staan in aparte groepen. Bij het openen van een onderdeel wordt het veld met de meeste matches gekozen. Het gekozen veld krijgt een gele achtergrond als het matches bevat; kleuren binnen de open keuzelijst hangen af van de browser.
 
 **Try an example with CRL** opent twee kleine fictieve projecten. Zo kun je de viewer uitproberen zonder klantgegevens.
 
-Het getal bij een tak telt alle matches in die tak, inclusief onderliggende onderdelen. Het label **name**, **content** of **name + content** geeft aan waar het geselecteerde onderdeel zelf matcht. Een suite krijgt geen eigen match doordat een step eronder matcht.
+De samenvatting bovenaan toont in hoeveel projecten, suites, cases en steps matches gevonden zijn. Elk onderdeel telt één keer, ook als de match in een onderliggende stap zit. De aantallen onderaan de boom blijven de totalen van alle geladen onderdelen.
+
+Het getal bij een tak telt alle matches in die tak, inclusief onderliggende onderdelen. De labels **name**, **properties** en **content**, eventueel gecombineerd, geven aan waar het geselecteerde onderdeel zelf matcht. Een suite krijgt geen eigen match doordat een step eronder matcht.
 
 De pijlen boven de tekst springen naar de vorige of volgende match in het gekozen veld. Grote velden worden in opeenvolgende fragmenten getoond; de volledige inhoud en alle matches blijven bereikbaar. `⌘K` / `Ctrl+K` focust het zoekvak. In de boom werken de pijltjestoetsen en Home/End.
 

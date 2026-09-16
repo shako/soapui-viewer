@@ -9,8 +9,8 @@ export function createProjectParser(fileName, prefix) {
   const nodes = [];
   const stack = [];
   let root;
-  const addField = (node, label, value, isName = false) => {
-    if (value.trim()) node.fields.push({ label, value, isName });
+  const addField = (node, label, value, category = 'content') => {
+    if (value.trim()) node.fields.push({ label, value, isName: category === 'name', category });
   };
   parser.on('doctype', () => { throw new Error('XML with a DTD is not supported. Export the project without a DTD.'); });
   parser.on('opentag', tag => {
@@ -34,17 +34,23 @@ export function createProjectParser(fileName, prefix) {
         type: attr('type') || '', disabled: attr('disabled') === 'true',
         sourceLine: parser.line, fileName, children: [], fields: [],
       };
-      addField(node, 'Name', node.name, true);
+      addField(node, 'Name', node.name, 'name');
       if (parent) parent.node.children.push(node.id);
       else root = node;
       nodes.push(node);
     }
     const path = isNode ? [] : [...parent.path, tag.local];
+    // Custom properties live directly on a project/suite/case, or in a step's
+    // config. A <property> inside request data remains ordinary content.
+    const propertyContainer = isSoap && tag.local === 'properties'
+      && (parent?.isNode || (parent?.path.length === 1 && parent.path[0] === 'config'));
+    const property = isSoap && tag.local === 'property' && parent?.propertyContainer;
+    const category = isSoap && parent?.property && (tag.local === 'name' || tag.local === 'value') ? 'property' : 'content';
     for (const attribute of attributes) {
       if (isNode && attribute.local === 'name' && !attribute.uri) continue;
       addField(node, [...path, `@${attribute.name}`].join(' / '), attribute.value);
     }
-    stack.push({ node, path, isNode, text: [] });
+    stack.push({ node, path, isNode, propertyContainer, property, category, text: [] });
   });
   const onText = value => { if (stack.length) stack.at(-1).text.push(value); };
   parser.on('text', onText);
@@ -55,7 +61,7 @@ export function createProjectParser(fileName, prefix) {
   });
   parser.on('closetag', () => {
     const frame = stack.pop();
-    addField(frame.node, frame.path.join(' / ') || 'Text', frame.text.join(''));
+    addField(frame.node, frame.path.join(' / ') || 'Text', frame.text.join(''), frame.category);
   });
   return {
     write(chunk) { parser.write(chunk); },
@@ -103,42 +109,49 @@ export function countMatches(value, regex) {
   return count;
 }
 
-export function searchNodes(nodes, query, caseSensitive = false) {
+const matchesScope = (field, scope) => scope === 'all' || field.category === scope;
+
+export function searchNodes(nodes, query, caseSensitive = false, scope = 'all') {
   const regex = matcher(query, caseSensitive);
   const hits = new Map();
   let occurrences = 0;
   let matchingNodes = 0;
   for (const node of nodes) {
     let name = 0;
+    let properties = 0;
     let content = 0;
     for (const field of node.fields) {
+      if (!matchesScope(field, scope)) continue;
       const count = countMatches(field.value, regex);
       if (field.isName) name += count;
+      else if (field.category === 'property') properties += count;
       else content += count;
     }
-    const own = name + content;
+    const own = name + properties + content;
     if (own) matchingNodes++;
     occurrences += own;
-    hits.set(node.id, { own, total: own, name, content });
+    hits.set(node.id, { own, total: own, name, properties, content });
   }
+  const matchingKinds = { project: 0, suite: 0, case: 0, step: 0 };
   for (let i = nodes.length - 1; i >= 0; i--) {
     const node = nodes[i];
+    if (hits.get(node.id).total) matchingKinds[node.kind]++;
     if (node.parentId) hits.get(node.parentId).total += hits.get(node.id).total;
   }
-  return { hits: Object.fromEntries(hits), occurrences, matchingNodes };
+  return { hits: Object.fromEntries(hits), occurrences, matchingNodes, matchingKinds };
 }
 
-export function describeNode(node, query, caseSensitive) {
+export function describeNode(node, query, caseSensitive, scope = 'all') {
   const regex = matcher(query, caseSensitive);
   return node.fields.map((field, index) => ({
     index, label: field.label, length: field.value.length,
-    count: countMatches(field.value, regex), isName: field.isName,
+    count: matchesScope(field, scope) ? countMatches(field.value, regex) : 0, isName: field.isName,
   }));
 }
 
-export function fieldPage(field, query, caseSensitive, { start = 0, matchIndex = null } = {}) {
+export function fieldPage(field, query, caseSensitive, { start = 0, matchIndex = null } = {}, scope = 'all') {
   const value = field.value;
-  const regex = matcher(query, caseSensitive);
+  const regex = matchesScope(field, scope) ? matcher(query, caseSensitive) : null;
   const size = Math.max(12000, query.length + 400);
   let total = 0;
   let target = null;

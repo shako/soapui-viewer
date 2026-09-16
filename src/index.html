@@ -19,6 +19,12 @@
   <main>
     <section class="search-panel" aria-label="Search">
       <label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search for a term, e.g. CRL" aria-label="Search all projects" autocomplete="off" spellcheck="false"><kbd>⌘ K</kbd></label>
+      <label class="search-scope">Search in <select id="search-scope">
+        <option value="all">All text</option>
+        <option value="name">Names</option>
+        <option value="property">Properties</option>
+        <option value="content">Content</option>
+      </select></label>
       <label class="check"><input type="checkbox" id="case-sensitive">Case sensitive</label>
       <p id="search-summary" role="status" aria-live="polite">Open your projects to search names and content.</p>
     </section>

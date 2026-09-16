@@ -21,12 +21,15 @@ You can also download the repository with **Code → Download ZIP**, extract it,
 
 - Searches across multiple projects at once, including names, Groovy scripts, requests, properties, assertions, setup/teardown scripts and other text values.
 - Keeps the project → suite → case → step hierarchy visible, showing matching branches and their parents.
-- Marks whether an item matches in its name, content, or both. Counts on a branch include its descendants without duplicating those matches as matches in the parent itself.
+- Shows how many projects, suites, cases and steps contain matches above the tree. Each item counts once, including parents of matching steps; the footer shows totals for all loaded items.
+- Marks whether an item matches in its name, properties or other content. Counts on a branch include its descendants without duplicating those matches as matches in the parent itself.
 - Offers **Show all … steps** to reveal the other steps in a matching testcase for context.
 - Groups content fields with matches first, ordered by match count, and lets you jump between every occurrence.
 - Provides a resizable project column, a **Collapse / Expand** toggle, and recent projects.
 - Click anywhere on a project, suite or case row to expand or collapse it and view its content. Steps without children simply show their content.
 - Hover over a row and choose **Copy** to copy its full name without changing the selection or expanding/collapsing the row. Touch devices always show the button.
+
+**Search in** limits matches to **All text**, **Names** (project, suite, case and step names), **Properties** (custom property names and values on projects, suites, cases and in step configurations), or **Content** (scripts, requests and other fields, excluding those names and properties). Tree matches, summary counts and content highlights all follow this filter. Use **Include fields without matches** to inspect other fields for context.
 
 Search is literal, case-insensitive by default, with an optional case-sensitive mode. It is not a regular-expression search. Disabled test steps are included.
 
