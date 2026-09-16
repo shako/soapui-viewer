@@ -129,6 +129,33 @@ async function chooseFiles() {
   await importFiles(files);
 }
 
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try { await navigator.clipboard.writeText(text); return; }
+    catch { /* Local file viewers may need the legacy clipboard fallback. */ }
+  }
+  const focused = document.activeElement;
+  const selection = document.getSelection();
+  const ranges = Array.from({ length: selection?.rangeCount || 0 }, (_, i) => selection.getRangeAt(i).cloneRange());
+  const input = el('textarea');
+  input.value = text;
+  input.readOnly = true;
+  input.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointer-events:none';
+  document.body.append(input);
+  try {
+    input.focus({ preventScroll: true });
+    input.select();
+    if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+  } finally {
+    input.remove();
+    focused?.focus({ preventScroll: true });
+    if (selection) {
+      selection.removeAllRanges();
+      for (const range of ranges) selection.addRange(range);
+    }
+  }
+}
+
 function reportError(message) {
   $('errors').hidden = false;
   $('errors').append(el('p', '', message));
@@ -323,11 +350,6 @@ function renderTree() {
     row.style.paddingLeft = `${8 + item.depth * 16}px`;
     const arrow = el('span', 'tree-toggle', node.children.length ? (item.open ? '▾' : '▸') : '');
     arrow.setAttribute('aria-hidden', 'true');
-    arrow.addEventListener('click', event => {
-      event.stopPropagation();
-      tree.focus({ preventScroll: true });
-      if (node.children.length) toggle(node.id);
-    });
     const name = el('span', 'node-name');
     name.append(highlight(node.name));
     name.title = node.name;
@@ -344,9 +366,28 @@ function renderTree() {
       badge.title = `${hit.own} ${hit.own === 1 ? 'match' : 'matches'} here; ${hit.total - hit.own} in child items`;
       row.append(badge);
     }
+    const copy = button('Copy', 'quiet copy-name', async event => {
+      event.stopPropagation();
+      $('copy-status').textContent = '';
+      try {
+        await copyText(node.name);
+        copy.textContent = 'Copied';
+        $('copy-status').textContent = `Copied ${node.name}`;
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1600);
+      } catch {
+        reportError('Could not copy the name. Check clipboard permissions in your browser and try again.');
+      }
+    });
+    copy.tabIndex = state.selected === node.id ? 0 : -1;
+    copy.title = 'Copy name';
+    copy.setAttribute('aria-label', `Copy name: ${node.name}`);
+    row.append(copy);
     row.addEventListener('click', () => {
       tree.focus({ preventScroll: true });
-      select(node.id).catch(error => reportError(error.message));
+      state.selected = node.id;
+      if (node.children.length) toggle(node.id);
+      else renderTree();
+      renderDetail().catch(error => reportError(error.message));
     });
     fragment.append(row);
   }
@@ -575,7 +616,7 @@ $('collapse').addEventListener('click', () => {
 $('tree').addEventListener('scroll', renderTree, { passive: true });
 new ResizeObserver(renderTree).observe($('tree'));
 $('tree').addEventListener('keydown', event => {
-  if (!state.rows.length) return;
+  if (event.target !== event.currentTarget || !state.rows.length) return;
   const index = state.rows.findIndex(row => row.id === state.selected);
   const current = state.nodes.get(state.selected);
   let target;

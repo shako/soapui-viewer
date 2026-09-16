@@ -25,10 +25,12 @@ You can also download the repository with **Code → Download ZIP**, extract it,
 - Offers **Show all … steps** to reveal the other steps in a matching testcase for context.
 - Groups content fields with matches first, ordered by match count, and lets you jump between every occurrence.
 - Provides a resizable project column, a **Collapse / Expand** toggle, and recent projects.
+- Click anywhere on a project, suite or case row to expand or collapse it and view its content. Steps without children simply show their content.
+- Hover over a row and choose **Copy** to copy its full name without changing the selection or expanding/collapsing the row. Touch devices always show the button.
 
 Search is literal, case-insensitive by default, with an optional case-sensitive mode. It is not a regular-expression search. Disabled test steps are included.
 
-**Keyboard:** `⌘K` / `Ctrl+K` focuses search. Arrow keys and Home/End navigate the project tree. The column divider also supports keyboard resizing after focusing it with Tab.
+**Keyboard:** `⌘K` / `Ctrl+K` focuses search. Arrow keys and Home/End navigate the project tree. Press Tab from the tree to reach **Copy** for the selected row, then Enter or Space to copy its name. The column divider also supports keyboard resizing after focusing it with Tab.
 
 ## Local files and recent projects
 

@@ -24,6 +24,10 @@ De pijlen boven de tekst springen naar de vorige of volgende match in het gekoze
 
 Sleep de scheidingslijn tussen de projectboom en de inhoud om de linkerkolom breder te maken. De breedte wordt onthouden in deze browser. Je kunt de scheidingslijn ook met Tab focussen en met links/rechts aanpassen. De knop **Collapse / Expand** wisselt automatisch en bedient de volledige zichtbare boom; bij een zoekterm blijven alleen relevante takken en gekozen testcasecontext zichtbaar.
 
+Klik ergens op een project-, suite- of caserij om die open of dicht te klappen en de inhoud te bekijken. Een stap zonder onderliggende items toont alleen de inhoud.
+
+Bij hover verschijnt **Copy** om de volledige naam te kopiëren, zonder de selectie of uitgeklapte takken te wijzigen. Op een aanraakscherm is de knop altijd zichtbaar. Via het toetsenbord: selecteer een rij met de pijltjestoetsen, druk Tab om **Copy** te bereiken en Enter of spatie om te kopiëren.
+
 ## Recente bestanden heropenen
 
 Via **Recent** open je de laatste 10 projecten opnieuw, ook na het sluiten en opnieuw openen van de viewer.
