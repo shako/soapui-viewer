@@ -5,7 +5,7 @@ export function createRecentStore(factory = globalThis.indexedDB) {
   let database;
   function open() {
     if (!database) database = new Promise((resolve, reject) => {
-      if (!factory) { reject(new Error('Deze browser biedt geen lokale opslag voor recente bestanden.')); return; }
+      if (!factory) { reject(new Error('This browser does not support local storage for recent files.')); return; }
       const request = factory.open(DATABASE, 1);
       request.onupgradeneeded = () => {
         request.result.createObjectStore('entries', { keyPath: 'id' });
@@ -13,7 +13,7 @@ export function createRecentStore(factory = globalThis.indexedDB) {
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error('Sluit andere vensters van deze viewer en probeer opnieuw.'));
+      request.onblocked = () => reject(new Error('Close other windows of this viewer and try again.'));
     });
     return database;
   }
@@ -23,7 +23,7 @@ export function createRecentStore(factory = globalThis.indexedDB) {
       const transaction = db.transaction(stores, mode);
       let result;
       transaction.oncomplete = () => resolve(result);
-      transaction.onabort = () => reject(transaction.error || new Error('Opslaan is onderbroken.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Saving was interrupted.'));
       transaction.onerror = () => {};
       try { action(transaction, value => { result = value; }); }
       catch (error) { transaction.abort(); reject(error); }
@@ -96,15 +96,15 @@ export async function readRecentFile(entry, store) {
     // Called directly from the recent-file button so the permission prompt keeps
     // the required user activation. Never substitute an old copy on failure.
     if (await entry.handle.requestPermission({ mode: 'read' }) !== 'granted') {
-      throw new Error('Geen leestoegang. Gebruik Projecten openen om het bestand opnieuw te kiezen.');
+      throw new Error('Read access was denied. Use Open projects to select the file again.');
     }
     try { return await entry.handle.getFile(); }
     catch (error) {
-      if (error.name === 'NotFoundError') throw new Error('Het oorspronkelijke bestand is verplaatst of verwijderd. Kies het opnieuw via Projecten openen.');
+      if (error.name === 'NotFoundError') throw new Error('The original file was moved or deleted. Select it again using Open projects.');
       throw error;
     }
   }
   const copy = await store.copy(entry.id);
-  if (!copy) throw new Error('Deze lokale kopie is niet meer beschikbaar. Open het oorspronkelijke XML-bestand opnieuw.');
+  if (!copy) throw new Error('This local copy is no longer available. Open the original XML file again.');
   return new File([copy], entry.name, { type: 'application/xml', lastModified: entry.lastModified });
 }

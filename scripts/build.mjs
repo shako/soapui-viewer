@@ -15,4 +15,4 @@ const licenseComment = `<!-- SoapUI Viewer\n${ownLicense}\n\nIncluded libraries:
 const safeScript = app.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 await mkdir('dist', { recursive: true });
 await writeFile('dist/index.html', template.replace('</head>', () => `${licenseComment}\n</head>`).replace('/* APP_STYLES */', () => css).replace('/* APP_SCRIPT */', () => safeScript));
-console.log('Gebouwd: dist/index.html — zelfstandig, offline, zonder installatie.');
+console.log('Built: dist/index.html — standalone, offline, no installation required.');

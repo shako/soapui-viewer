@@ -52,7 +52,7 @@ test('standalone HTML embeds a working worker: imports, errors, search, detail a
   assert.equal(matches.occurrences, 12);
   assert.equal(matches.hits[first.rootId].total, 8);
   assert.equal(matches.hits[other.rootId].total, 4);
-  const step = first.nodes.find(node => node.name === 'Intrekking controleren');
+  const step = first.nodes.find(node => node.name === 'Check revocation');
   const detail = await send('detail', { nodeId: step.id, query: 'CRL', caseSensitive: false });
   const script = detail.find(field => field.label.endsWith('script'));
   const page = await send('field', { nodeId: step.id, fieldIndex: script.index, query: 'CRL', caseSensitive: false, page: { matchIndex: 4 } });

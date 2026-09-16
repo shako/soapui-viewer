@@ -17,17 +17,17 @@ async function handle({ id, action, ...data }) {
       result = searchNodes([...nodes.values()], data.query, data.caseSensitive);
     } else if (action === 'detail') {
       const node = nodes.get(data.nodeId);
-      if (!node) throw new Error('Dit onderdeel is niet meer geopend.');
+      if (!node) throw new Error('This item is no longer open.');
       result = describeNode(node, data.query, data.caseSensitive);
     } else if (action === 'field') {
       const field = nodes.get(data.nodeId)?.fields[data.fieldIndex];
-      if (!field) throw new Error('Dit veld is niet meer beschikbaar.');
+      if (!field) throw new Error('This field is no longer available.');
       result = fieldPage(field, data.query, data.caseSensitive, data.page);
     } else if (action === 'clear') {
       nodes.clear();
       result = true;
     } else {
-      throw new Error('Onbekende actie.');
+      throw new Error('Unknown action.');
     }
     postMessage({ id, result });
   } catch (error) {

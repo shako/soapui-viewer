@@ -12,29 +12,29 @@ export function createProjectParser(fileName, prefix) {
   const addField = (node, label, value, isName = false) => {
     if (value.trim()) node.fields.push({ label, value, isName });
   };
-  parser.on('doctype', () => { throw new Error('XML met een DTD wordt niet ondersteund. Exporteer het project zonder DTD.'); });
+  parser.on('doctype', () => { throw new Error('XML with a DTD is not supported. Export the project without a DTD.'); });
   parser.on('opentag', tag => {
     const parent = stack.at(-1);
     const isSoap = tag.uri === SOAP_NS || tag.uri === '';
     const kind = isSoap ? kinds[tag.local] : undefined;
     if (!parent && kind !== 'project') {
-      throw new Error('Dit is geen volledig SOAP UI-project. Kies de XML-export met een soapui-project als hoofdelement.');
+      throw new Error('This is not a complete SoapUI project. Choose the XML export with soapui-project as its root element.');
     }
     const attributes = Object.values(tag.attributes).filter(attr => attr.uri !== 'http://www.w3.org/2000/xmlns/');
     const attr = name => attributes.find(item => item.local === name && !item.uri)?.value;
     if ((kind === 'project' && attr('encrypted') === 'true') || (isSoap && tag.local === 'encryptedContent')) {
-      throw new Error('Dit project is versleuteld. Exporteer eerst een ontsleutelde kopie vanuit SOAP UI.');
+      throw new Error('This project is encrypted. Export a decrypted copy from SoapUI first.');
     }
     const isNode = !parent || (kind && parent.isNode && parent.node.kind === parents[kind]);
     let node = parent?.node;
     if (isNode) {
       node = {
         id: `${prefix}-${nodes.length}`, parentId: parent?.node.id ?? null, kind,
-        name: attr('name') || (kind === 'project' ? fileName : '(zonder naam)'),
+        name: attr('name') || (kind === 'project' ? fileName : '(unnamed)'),
         type: attr('type') || '', disabled: attr('disabled') === 'true',
         sourceLine: parser.line, fileName, children: [], fields: [],
       };
-      addField(node, 'Naam', node.name, true);
+      addField(node, 'Name', node.name, true);
       if (parent) parent.node.children.push(node.id);
       else root = node;
       nodes.push(node);
@@ -51,17 +51,17 @@ export function createProjectParser(fileName, prefix) {
   parser.on('cdata', onText);
   parser.on('comment', value => {
     const frame = stack.at(-1);
-    if (frame) addField(frame.node, [...frame.path, 'XML-commentaar'].join(' / '), value);
+    if (frame) addField(frame.node, [...frame.path, 'XML comment'].join(' / '), value);
   });
   parser.on('closetag', () => {
     const frame = stack.pop();
-    addField(frame.node, frame.path.join(' / ') || 'Tekst', frame.text.join(''));
+    addField(frame.node, frame.path.join(' / ') || 'Text', frame.text.join(''));
   });
   return {
     write(chunk) { parser.write(chunk); },
     finish() {
       parser.close();
-      if (!root) throw new Error('Het bestand bevat geen SOAP UI-project.');
+      if (!root) throw new Error('This file does not contain a SoapUI project.');
       return { rootId: root.id, nodes };
     },
   };

@@ -64,7 +64,7 @@ test('forget one and forget all remove metadata and cached bytes, without changi
   assert.equal((await store.list()).length, 0);
   assert.equal(await a.text(), 'unchanged A');
   assert.equal(await b.text(), 'unchanged B');
-  await assert.rejects(readRecentFile(two, store), /niet meer beschikbaar/);
+  await assert.rejects(readRecentFile(two, store), /no longer available/);
 });
 
 test('original-file reopen requests only read access and reads the current file each time', async () => {
@@ -86,12 +86,12 @@ test('denied permission or a missing original never silently reopens a stale cop
     requestPermission: async () => 'denied',
     getFile() { throw new Error('Must not read after denial'); },
   } };
-  await assert.rejects(readRecentFile(denied, store), /Geen leestoegang/);
+  await assert.rejects(readRecentFile(denied, store), /Read access was denied/);
   const missing = { kind: 'original', handle: {
     requestPermission: async () => 'granted',
     getFile: async () => { throw new DOMException('missing', 'NotFoundError'); },
   } };
-  await assert.rejects(readRecentFile(missing, store), /verplaatst of verwijderd/);
+  await assert.rejects(readRecentFile(missing, store), /moved or deleted/);
 });
 
 test('a copy larger than 23 MB can be saved and read in a new session', async () => {
@@ -104,5 +104,5 @@ test('a copy larger than 23 MB can be saved and read in a new session', async ()
 });
 
 test('unavailable storage rejects explicitly without needing a remote fallback', async () => {
-  await assert.rejects(createRecentStore(null).list(), /geen lokale opslag/);
+  await assert.rejects(createRecentStore(null).list(), /does not support local storage/);
 });

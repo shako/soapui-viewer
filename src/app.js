@@ -16,8 +16,8 @@ const button = (text, className, action) => {
   element.addEventListener('click', action);
   return element;
 };
-const format = number => number.toLocaleString('nl-BE');
-const kindNames = { project: 'Project', suite: 'Testsuite', case: 'Testcase', step: 'Teststep' };
+const format = number => number.toLocaleString('en-GB');
+const kindNames = { project: 'Project', suite: 'Test suite', case: 'Test case', step: 'Test step' };
 const icons = { project: 'P', suite: 'S', case: 'C', step: '›_' };
 const state = {
   nodes: new Map(), roots: [], hits: {}, rows: [], selected: null,
@@ -41,29 +41,29 @@ let recentNotice = '';
 let openingRecent = false;
 let recentRefresh = 0;
 
-const fileDate = timestamp => new Date(timestamp).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' });
-const fileSize = bytes => `${(bytes / 1024 / 1024).toLocaleString('nl-BE', { maximumFractionDigits: 1 })} MB`;
+const fileDate = timestamp => new Date(timestamp).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' });
+const fileSize = bytes => `${(bytes / 1024 / 1024).toLocaleString('en-GB', { maximumFractionDigits: 1 })} MB`;
 
 function renderRecents() {
   const busy = state.importing || openingRecent;
-  $('recents-status').textContent = recentNotice || (!recentEntries.length ? 'Nog geen recente projecten. Open een XML-bestand om het hier te bewaren.' : '');
+  $('recents-status').textContent = recentNotice || (!recentEntries.length ? 'No recent projects yet. Open an XML file to save it here.' : '');
   const list = document.createDocumentFragment();
   for (const entry of recentEntries) {
     const row = el('div', 'recent-entry');
     const info = el('div', 'recent-info');
     info.append(el('strong', '', entry.name), el('span', '', entry.kind === 'original'
-      ? `Origineel bestand · laatst geopend ${fileDate(entry.openedAt)} · ${fileSize(entry.size)}`
-      : `Lokale kopie van ${fileDate(entry.savedAt)} · ${fileSize(entry.size)}`));
+      ? `Original file · last opened ${fileDate(entry.openedAt)} · ${fileSize(entry.size)}`
+      : `Local copy saved on ${fileDate(entry.savedAt)} · ${fileSize(entry.size)}`));
     const actions = el('div', 'recent-actions');
     const alreadyOpen = state.roots.some(id => state.nodes.get(id).recentId === entry.id);
-    const reopen = button(alreadyOpen ? 'Geopend' : entry.kind === 'original' ? 'Heropenen' : 'Kopie openen', 'secondary', () => openRecent(entry));
+    const reopen = button(alreadyOpen ? 'Open' : entry.kind === 'original' ? 'Reopen' : 'Open copy', 'secondary', () => openRecent(entry));
     reopen.disabled = busy || alreadyOpen;
-    const remove = button('Verwijderen', 'quiet', async () => {
+    const remove = button('Remove', 'quiet', async () => {
       try { await recentStore.remove(entry.id); recentNotice = ''; await refreshRecents(); }
       catch (error) { recentNotice = error.message; renderRecents(); }
     });
     remove.disabled = busy;
-    remove.setAttribute('aria-label', `${entry.name} uit recente projecten verwijderen`);
+    remove.setAttribute('aria-label', `Remove ${entry.name} from recent projects`);
     actions.append(reopen, remove);
     row.append(info, actions);
     list.append(row);
@@ -80,7 +80,7 @@ async function refreshRecents() {
     if (ticket !== recentRefresh) return;
     recentEntries = entries;
   } catch {
-    recentNotice = 'De browser heeft lokale opslag geblokkeerd. Bestanden openen en zoeken blijven werken; recente bestanden bewaren lukt hier niet.';
+    recentNotice = 'Local storage is unavailable. You can still open and search files, but recent projects cannot be saved in this browser.';
   }
   renderRecents();
 }
@@ -88,7 +88,7 @@ async function refreshRecents() {
 async function openRecent(entry) {
   if (state.importing || openingRecent) return;
   openingRecent = true;
-  recentNotice = `${entry.name} openen…`;
+  recentNotice = `Opening ${entry.name}…`;
   // Start before an asynchronous DB operation can consume the user activation.
   const reading = readRecentFile(entry, recentStore);
   renderRecents();
@@ -111,7 +111,7 @@ async function chooseFiles() {
   if (typeof window.showOpenFilePicker !== 'function') { $('file-input').click(); return; }
   let handles;
   try {
-    handles = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'SoapUI XML-projecten', accept: { 'application/xml': ['.xml'] } }] });
+    handles = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'SoapUI XML projects', accept: { 'application/xml': ['.xml'] } }] });
   } catch (error) {
     if (error.name === 'AbortError') return;
     // Some browsers expose the API but block it for local file:// documents.
@@ -136,7 +136,7 @@ function reportError(message) {
 
 worker.onmessage = ({ data }) => {
   if (data.event === 'progress') {
-    $('import-label').textContent = `${data.fileName} lezen… ${Math.round(data.progress * 100)}%`;
+    $('import-label').textContent = `Reading ${data.fileName}… ${Math.round(data.progress * 100)}%`;
     $('import-progress').value = data.progress;
     return;
   }
@@ -147,7 +147,7 @@ worker.onmessage = ({ data }) => {
   else request.resolve(data.result);
 };
 worker.onerror = () => {
-  const error = new Error('De achtergrondtaak is gestopt. Heropen de viewer en probeer je bestanden één voor één te openen.');
+  const error = new Error('Background processing has stopped. Reopen the viewer and try opening your files one at a time.');
   for (const request of pending.values()) request.reject(error);
   pending.clear();
   reportError(error.message);
@@ -186,7 +186,7 @@ async function importFiles(files, { remember = true } = {}) {
   renderRecents();
   try {
     for (const file of files) {
-      $('import-label').textContent = `${file.name} openen…`;
+      $('import-label').textContent = `Opening ${file.name}…`;
       $('import-progress').value = 0;
       try {
         const project = await rpc('import', { file });
@@ -196,7 +196,7 @@ async function importFiles(files, { remember = true } = {}) {
           if (node.kind === 'project' || node.kind === 'suite') state.expanded.add(node.id);
         }
         if (!project.nodes.some(node => node.kind === 'suite')) {
-          reportError(`${file.name}: geen testsuites gevonden. Voor een composite project heb je eerst een export als één volledig XML-bestand nodig.`);
+          reportError(`${file.name}: no test suites found. For a composite project, first export it as one complete XML file.`);
         }
         updateTotals();
         const source = fileOrigins.get(file) || {};
@@ -204,11 +204,11 @@ async function importFiles(files, { remember = true } = {}) {
         if (source.isCopy) root.copySavedAt = source.savedAt;
         if (remember) {
           try {
-            $('import-label').textContent = `${file.name} aan recente projecten toevoegen…`;
+            $('import-label').textContent = `Adding ${file.name} to recent projects…`;
             const entry = await recentStore.remember(file, source);
             root.recentId = entry.id;
           } catch {
-            reportError(`${file.name} is geopend, maar kon niet worden bewaard bij Recent. De browseropslag is geblokkeerd of vol. Je kunt het bestand later opnieuw kiezen.`);
+            reportError(`${file.name} is open, but could not be saved to Recent. Browser storage is blocked or full. You can select the file again later.`);
           }
         }
       } catch (error) {
@@ -241,7 +241,7 @@ async function runSearch() {
   const ticket = ++searchTicket;
   const query = $('search').value;
   const caseSensitive = $('case-sensitive').checked;
-  if (state.roots.length) $('search-summary').textContent = 'Zoeken in alle projecten…';
+  if (state.roots.length) $('search-summary').textContent = 'Searching all projects…';
   const started = performance.now();
   const result = await rpc('search', { query, caseSensitive });
   if (ticket !== searchTicket) return;
@@ -255,26 +255,26 @@ async function runSearch() {
     $('tree').scrollTop = 0;
   }
   $('search-summary').textContent = !state.roots.length
-    ? 'Open je projecten om te zoeken in namen en inhoud.'
+    ? 'Open your projects to search names and content.'
     : query
-      ? `${format(result.occurrences)} matches in ${format(result.matchingNodes)} onderdelen · ${format(state.roots.length)} projecten doorzocht · ${Math.round(performance.now() - started)} ms`
-      : 'Alle onderdelen zichtbaar. Zoek in namen, scripts, requests, properties en overige inhoud.';
+      ? `${format(result.occurrences)} ${result.occurrences === 1 ? 'match' : 'matches'} in ${format(result.matchingNodes)} ${result.matchingNodes === 1 ? 'item' : 'items'} · ${format(state.roots.length)} ${state.roots.length === 1 ? 'project' : 'projects'} searched · ${Math.round(performance.now() - started)} ms`
+      : 'All items are visible. Search names, scripts, requests, properties and other content.';
   refreshRows();
   if (!state.rows.some(row => row.id === state.selected)) {
     state.selected = (state.rows.find(row => state.hits[row.id]?.own) || state.rows[0])?.id ?? null;
   }
   renderTree();
   await renderDetail();
-  return { matches: result.occurrences, onderdelen: result.matchingNodes, projecten: state.roots.length };
+  return { matches: result.occurrences, items: result.matchingNodes, projects: state.roots.length };
 }
 
 function refreshRows() {
   state.rows = visibleRows(state.roots, state.nodes, state.hits, !!state.query, state.expanded, state.collapsed, state.contextCases);
   $('tree-spacer').style.height = `${state.rows.length * 42}px`;
   $('tree-empty').hidden = !!state.rows.length;
-  $('tree-empty').textContent = state.roots.length ? 'Geen matches. Probeer een andere zoekterm.' : 'Je geopende projecten verschijnen hier.';
-  $('tree-description').textContent = state.query ? 'Alleen matches en hun bovenliggende onderdelen' : 'Suite → case → step';
-  $('collapse').textContent = hasExpandedBranches() ? 'Inklappen' : 'Uitklappen';
+  $('tree-empty').textContent = state.roots.length ? 'No matches. Try a different search term.' : 'Your open projects will appear here.';
+  $('tree-description').textContent = state.query ? 'Matching items and their parents' : 'Suite → case → step';
+  $('collapse').textContent = hasExpandedBranches() ? 'Collapse' : 'Expand';
   $('collapse').disabled = !state.rows.some(row => state.nodes.get(row.id).children.length);
 }
 
@@ -319,7 +319,7 @@ function renderTree() {
     row.setAttribute('aria-level', item.depth + 1);
     row.setAttribute('aria-selected', state.selected === node.id);
     if (node.children.length) row.setAttribute('aria-expanded', item.open);
-    row.setAttribute('aria-label', `${kindNames[node.kind]}: ${node.name}${hit?.own ? `, ${hit.own} matches` : ''}${node.disabled ? ', uitgeschakeld' : ''}`);
+    row.setAttribute('aria-label', `${kindNames[node.kind]}: ${node.name}${hit?.own ? `, ${hit.own} ${hit.own === 1 ? 'match' : 'matches'}` : ''}${node.disabled ? ', disabled' : ''}`);
     row.style.paddingLeft = `${8 + item.depth * 16}px`;
     const arrow = el('span', 'tree-toggle', node.children.length ? (item.open ? '▾' : '▸') : '');
     arrow.setAttribute('aria-hidden', 'true');
@@ -334,14 +334,14 @@ function renderTree() {
     const icon = el('span', `node-icon ${node.kind}`, icons[node.kind]);
     icon.setAttribute('aria-hidden', 'true');
     row.append(arrow, icon, name);
-    if (node.disabled) row.append(el('span', 'disabled-label', 'uit'));
+    if (node.disabled) row.append(el('span', 'disabled-label', 'off'));
     if (state.query && hit?.own) {
-      const label = hit.name && hit.content ? 'naam + inhoud' : hit.name ? 'naam' : 'inhoud';
+      const label = hit.name && hit.content ? 'name + content' : hit.name ? 'name' : 'content';
       row.append(el('span', 'hit-kind', label));
     }
     if (state.query && hit?.total) {
       const badge = el('span', 'hit-badge', format(hit.total));
-      badge.title = `${hit.own} matches hier; ${hit.total - hit.own} in onderliggende onderdelen`;
+      badge.title = `${hit.own} ${hit.own === 1 ? 'match' : 'matches'} here; ${hit.total - hit.own} in child items`;
       row.append(badge);
     }
     row.addEventListener('click', () => {
@@ -371,14 +371,14 @@ async function renderDetail() {
     if (!state.roots.length) detail.replaceChildren(welcome);
     else {
       const empty = el('div', 'welcome');
-      empty.append(el('h2', '', 'Geen matches gevonden'), el('p', '', 'Probeer een kortere zoekterm of schakel hoofdlettergevoelig zoeken uit.'));
+      empty.append(el('h2', '', 'No matches found'), el('p', '', 'Try a shorter search term or turn off case-sensitive search.'));
       detail.replaceChildren(empty);
     }
     return;
   }
   const head = el('div', 'detail-head');
   const breadcrumb = el('nav', 'breadcrumb');
-  breadcrumb.setAttribute('aria-label', 'Pad naar dit onderdeel');
+  breadcrumb.setAttribute('aria-label', 'Path to this item');
   const path = ancestors(node);
   path.forEach((part, index) => {
     if (index) breadcrumb.append(el('span', '', ' / '));
@@ -386,18 +386,18 @@ async function renderDetail() {
   });
   const title = el('h2');
   title.append(highlight(node.name));
-  head.append(breadcrumb, el('p', 'detail-kind', `${kindNames[node.kind]}${node.type ? ` · ${node.type}` : ''}${node.disabled ? ' · Uitgeschakeld' : ''}`), title,
-    el('p', 'source-meta', `${node.fileName} · XML-regel ${format(node.sourceLine)}${node.children.length ? ` · ${format(node.children.length)} ${node.kind === 'case' ? 'stappen' : 'onderdelen'}` : ''}`));
-  if (path[0].copySavedAt) head.append(el('p', 'copy-notice', `Lokale kopie van ${fileDate(path[0].copySavedAt)}. Open het XML-bestand opnieuw voor wijzigingen die daarna zijn gemaakt.`));
+  head.append(breadcrumb, el('p', 'detail-kind', `${kindNames[node.kind]}${node.type ? ` · ${node.type}` : ''}${node.disabled ? ' · Disabled' : ''}`), title,
+    el('p', 'source-meta', `${node.fileName} · XML line ${format(node.sourceLine)}${node.children.length ? ` · ${format(node.children.length)} ${node.kind === 'case' ? (node.children.length === 1 ? 'step' : 'steps') : (node.children.length === 1 ? 'item' : 'items')}` : ''}`));
+  if (path[0].copySavedAt) head.append(el('p', 'copy-notice', `Local copy saved on ${fileDate(path[0].copySavedAt)}. Reopen the original XML file to see changes made since then.`));
   const body = el('div', 'detail-body');
-  body.append(el('p', 'match-note', 'Inhoud laden…'));
+  body.append(el('p', 'match-note', 'Loading content…'));
   detail.replaceChildren(head);
   const caseNode = path.find(part => part.kind === 'case');
   if (state.query && caseNode) {
     const context = el('div', 'context-bar');
     const all = state.contextCases.has(caseNode.id);
-    context.append(el('span', '', all ? 'Alle stappen van deze testcase zijn zichtbaar.' : 'Ook de stappen rondom deze match bekijken?'));
-    context.append(button(all ? 'Alleen relevante stappen' : `Toon alle ${caseNode.children.length} stappen`, 'secondary', () => {
+    context.append(el('span', '', all ? 'All steps in this test case are visible.' : 'Want to see the other steps in this test case?'));
+    context.append(button(all ? 'Show matching steps only' : `Show all ${caseNode.children.length} ${caseNode.children.length === 1 ? 'step' : 'steps'}`, 'secondary', () => {
       if (all) state.contextCases.delete(caseNode.id);
       else state.contextCases.add(caseNode.id);
       state.collapsed.delete(caseNode.id);
@@ -417,10 +417,10 @@ async function renderDetail() {
   body.replaceChildren();
   const hits = state.hits[node.id] || { own: 0, total: 0 };
   body.append(el('p', 'match-note', state.query
-    ? `${format(hits.own)} matches in dit onderdeel${hits.total > hits.own ? ` · ${format(hits.total - hits.own)} in onderliggende onderdelen` : ''}.`
-    : 'Kies een veld om de volledige tekst te bekijken.'));
+    ? `${format(hits.own)} ${hits.own === 1 ? 'match' : 'matches'} in this item${hits.total > hits.own ? ` · ${format(hits.total - hits.own)} in child items` : ''}.`
+    : 'Choose a field to view its full text.'));
   const controls = el('div', 'field-controls');
-  const label = el('label', 'field-label', 'Inhoud');
+  const label = el('label', 'field-label', 'Content');
   label.htmlFor = 'field-select';
   const fieldSelect = el('select');
   fieldSelect.id = 'field-select';
@@ -428,7 +428,7 @@ async function renderDetail() {
   const allFields = el('input');
   allFields.type = 'checkbox';
   allFields.checked = !state.query || hits.own === 0;
-  allLabel.append(allFields, document.createTextNode('Ook velden zonder match tonen'));
+  allLabel.append(allFields, document.createTextNode('Include fields without matches'));
   allLabel.hidden = !state.query;
   controls.append(fieldSelect, allLabel);
   const viewer = el('div');
@@ -440,8 +440,8 @@ async function renderDetail() {
     if (!fieldSelect.options.length) {
       fieldSelect.classList.remove('has-matches');
       viewer.replaceChildren(el('p', 'field-empty', hits.total > hits.own
-        ? 'De matches zitten in onderliggende onderdelen. Selecteer ze in de boom, of toon hierboven ook de velden zonder match.'
-        : 'Geen match in de eigen velden. Vink hierboven aan om de volledige inhoud te bekijken.'));
+        ? 'Matches are in child items. Select them in the tree, or select Include fields without matches above.'
+        : 'No matches in this item’s fields. Select Include fields without matches above to view all content.'));
       return;
     }
     const thisFieldTicket = ++fieldTicket;
@@ -451,15 +451,15 @@ async function renderDetail() {
     const result = await rpc('field', { nodeId: node.id, fieldIndex, query: state.query, caseSensitive: state.caseSensitive, page });
     if (ticket !== detailTicket || thisFieldTicket !== fieldTicket) return;
     const toolbar = el('div', 'code-toolbar');
-    toolbar.append(el('span', '', `Vanaf tekstregel ${format(result.line)} · ${format(result.length)} tekens`));
+    toolbar.append(el('span', '', `From text line ${format(result.line)} · ${format(result.length)} ${result.length === 1 ? 'character' : 'characters'}`));
     if (result.total) {
       const navigation = el('div', 'match-navigation');
       const index = result.matchIndex;
       const previous = button('↑', 'secondary', () => showField({ matchIndex: index === null ? result.total - 1 : (index + result.total - 1) % result.total }).catch(error => reportError(error.message)));
-      previous.setAttribute('aria-label', 'Vorige match in dit veld');
+      previous.setAttribute('aria-label', 'Previous match in this field');
       const next = button('↓', 'secondary', () => showField({ matchIndex: index === null ? 0 : (index + 1) % result.total }).catch(error => reportError(error.message)));
-      next.setAttribute('aria-label', 'Volgende match in dit veld');
-      navigation.append(el('span', '', index === null ? `${format(result.total)} matches` : `Match ${format(index + 1)} / ${format(result.total)}`), previous, next);
+      next.setAttribute('aria-label', 'Next match in this field');
+      navigation.append(el('span', '', index === null ? `${format(result.total)} ${result.total === 1 ? 'match' : 'matches'}` : `Match ${format(index + 1)} / ${format(result.total)}`), previous, next);
       toolbar.append(navigation);
     }
     const code = el('pre', 'code');
@@ -474,11 +474,11 @@ async function renderDetail() {
     viewer.replaceChildren(toolbar, code);
     if (result.start > 0 || result.end < result.length) {
       const pages = el('div', 'page-tools');
-      const previous = button('← Vorig fragment', 'secondary', () => showField({ start: Math.max(0, result.start - 12000) }).catch(error => reportError(error.message)));
+      const previous = button('← Previous section', 'secondary', () => showField({ start: Math.max(0, result.start - 12000) }).catch(error => reportError(error.message)));
       previous.disabled = result.start === 0;
-      const next = button('Volgend fragment →', 'secondary', () => showField({ start: result.end }).catch(error => reportError(error.message)));
+      const next = button('Next section →', 'secondary', () => showField({ start: result.end }).catch(error => reportError(error.message)));
       next.disabled = result.end >= result.length;
-      pages.append(previous, el('span', '', `Tekens ${format(result.start + 1)}–${format(result.end)} van ${format(result.length)}`), next);
+      pages.append(previous, el('span', '', `Characters ${format(result.start + 1)}–${format(result.end)} of ${format(result.length)}`), next);
       viewer.append(pages);
     }
     requestAnimationFrame(() => {
@@ -491,12 +491,12 @@ async function renderDetail() {
     const previous = fieldSelect.value;
     fieldSelect.replaceChildren();
     const matchingGroup = el('optgroup', 'field-group-matches');
-    matchingGroup.label = 'Met matches — meeste eerst';
+    matchingGroup.label = 'Matching fields (most matches first)';
     const otherGroup = el('optgroup');
-    otherGroup.label = 'Zonder matches';
+    otherGroup.label = 'Fields without matches';
     for (const field of orderedFields) {
       if (state.query && !allFields.checked && !field.count) continue;
-      const prefix = state.query ? (field.count ? `${format(field.count)} ${field.count === 1 ? 'match' : 'matches'} — ` : 'Geen matches — ') : '';
+      const prefix = state.query ? (field.count ? `${format(field.count)} ${field.count === 1 ? 'match' : 'matches'} — ` : 'No matches — ') : '';
       const option = el('option', state.query ? (field.count ? 'field-option-match' : 'field-option-no-match') : '', `${prefix}${field.label}`);
       option.value = field.index;
       if (state.query) (field.count ? matchingGroup : otherGroup).append(option);
@@ -638,14 +638,14 @@ if (document.modelContext?.registerTool) {
   const lifecycle = new AbortController();
   Promise.resolve(document.modelContext.registerTool({
     name: 'search_open_soapui_projects',
-    title: 'Zoek in geopende SOAP UI-projecten',
-    description: 'Filter de zichtbare projectboom op een letterlijke zoekterm in namen en inhoud. Werkt alleen op bestanden die de gebruiker al heeft geopend.',
+    title: 'Search open SoapUI projects',
+    description: 'Filter the visible project tree by a literal search term in names and content. Only searches files the user has already opened.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     async execute(input) {
-      if (!input || typeof input.query !== 'string' || Object.keys(input).some(key => key !== 'query')) throw new Error('Geef uitsluitend een tekstuele query op.');
-      if (state.importing) throw new Error('Wacht tot de projecten zijn ingelezen.');
-      if (!state.roots.length) throw new Error('Open eerst een SOAP UI-project.');
+      if (!input || typeof input.query !== 'string' || Object.keys(input).some(key => key !== 'query')) throw new Error('Provide only a text query.');
+      if (state.importing) throw new Error('Wait for the projects to finish loading.');
+      if (!state.roots.length) throw new Error('Open a SoapUI project first.');
       $('search').value = input.query;
       return await runSearch();
     },

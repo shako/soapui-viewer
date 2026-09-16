@@ -25,9 +25,9 @@ test('recognizes real SoapUI hierarchy, namespaces, step types and disabled step
 test('each match belongs to its own suite, case or step, with ancestor totals only', () => {
   const { nodes } = example();
   const result = searchNodes(nodes, 'CRL');
-  const suite = nodes.find(node => node.name === 'Certificaatvalidatie');
-  const caseNode = nodes.find(node => node.name === 'Ingetrokken certificaat weigeren');
-  const script = nodes.find(node => node.name === 'Intrekking controleren');
+  const suite = nodes.find(node => node.name === 'Certificate validation');
+  const caseNode = nodes.find(node => node.name === 'Reject revoked certificate');
+  const script = nodes.find(node => node.name === 'Check revocation');
   assert.equal(result.hits[suite.id].own, 1);
   assert.equal(result.hits[caseNode.id].own, 0);
   assert.equal(result.hits[script.id].own, 5);
@@ -36,7 +36,7 @@ test('each match belongs to its own suite, case or step, with ancestor totals on
   assert.equal(result.matchingNodes, 3);
   assert.equal(result.hits[nodes[0].id].total, result.occurrences);
   const scriptField = script.fields.find(field => field.label.endsWith('script'));
-  assert.ok(scriptField.value.includes('${CRL ophalen#Response}'));
+  assert.ok(scriptField.value.includes('${Fetch CRL#Response}'));
 });
 
 test('CDATA and XML entities remain correct across arbitrary streaming boundaries', () => {
@@ -105,22 +105,22 @@ test('filtered tree keeps ancestors and reveals only requested case context', ()
   const { nodes, rootId } = example();
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
   const { hits } = searchNodes(nodes, 'CRL');
-  const caseNode = nodes.find(node => node.name === 'Ingetrokken certificaat weigeren');
+  const caseNode = nodes.find(node => node.name === 'Reject revoked certificate');
   const rows = context => visibleRows([rootId], nodeMap, hits, true, new Set(), new Set(), context);
   assert.deepEqual(rows(new Set()).map(row => nodeMap.get(row.id).name), [
-    'Certificaten · voorbeeld', 'Certificaatvalidatie', 'Ingetrokken certificaat weigeren', 'CRL ophalen', 'Intrekking controleren',
+    'Certificates · example', 'Certificate validation', 'Reject revoked certificate', 'Fetch CRL', 'Check revocation',
   ]);
   const context = rows(new Set([caseNode.id]));
   assert.equal(context.length, 7);
   assert.equal(context.filter(row => row.context).length, 2);
-  assert.equal(context.some(row => nodeMap.get(row.id).name === 'Geldig certificaat accepteren'), false);
+  assert.equal(context.some(row => nodeMap.get(row.id).name === 'Accept valid certificate'), false);
   const collapsed = visibleRows([rootId], nodeMap, hits, true, new Set(), new Set([caseNode.id]), new Set());
   assert.equal(collapsed.length, 3);
 });
 
 test('name-only suite match does not imply a match in every descendant', () => {
   const { nodes, rootId } = example();
-  const { hits } = searchNodes(nodes, 'Certificaatvalidatie', true);
+  const { hits } = searchNodes(nodes, 'Certificate validation', true);
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
   const rows = visibleRows([rootId], nodeMap, hits, true, new Set(), new Set(), new Set());
   assert.equal(rows.length, 2);
@@ -146,7 +146,7 @@ test('long single-line fields expose the last match and every character without 
 
 test('field metadata and marks agree, including repeated overlapping candidates and Unicode offsets', () => {
   const { nodes } = example();
-  const node = nodes.find(item => item.name === 'Intrekking controleren');
+  const node = nodes.find(item => item.name === 'Check revocation');
   const fields = describeNode(node, 'CRL', false);
   assert.equal(fields.find(field => field.label.endsWith('script')).count, 5);
   const unicode = fieldPage({ value: 'İ 😀 CRL\ncrl' }, 'crl', false, { matchIndex: 1 });

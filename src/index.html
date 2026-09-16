@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Doorzoek SOAP UI-projecten lokaal. Vind tekst in testsuites, testcases, stappen en scripts, met de volledige context.">
+  <meta name="description" content="Search SoapUI projects locally. Find text in test suites, test cases, steps and scripts, with full context.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; worker-src blob:; child-src blob:; connect-src 'none'; img-src data:; base-uri 'none'; form-action 'none'">
   <title>SOAP UI Viewer</title>
   <style>/* APP_STYLES */</style>
@@ -11,49 +11,49 @@
 <body>
   <header class="app-header">
     <div class="brand"><span class="brand-icon" aria-hidden="true">&lt;/&gt;</span><strong>SOAP UI <span>Viewer</span></strong></div>
-    <span class="local-note">Volledig lokaal · Alleen lezen</span>
+    <span class="local-note">Fully local · Read only</span>
     <button id="open-recents" class="button recent-button" aria-haspopup="dialog">Recent</button>
-    <button id="open-files" class="button primary">Projecten openen <span aria-hidden="true">＋</span></button>
+    <button id="open-files" class="button primary">Open projects <span aria-hidden="true">＋</span></button>
     <input id="file-input" type="file" accept=".xml,text/xml,application/xml" multiple hidden>
   </header>
   <main>
-    <section class="search-panel" aria-label="Zoeken">
-      <label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Zoek bijvoorbeeld CRL…" aria-label="Zoek in alle projecten" autocomplete="off" spellcheck="false"><kbd>⌘ K</kbd></label>
-      <label class="check"><input type="checkbox" id="case-sensitive">Hoofdlettergevoelig</label>
-      <p id="search-summary" role="status" aria-live="polite">Open je projecten om te zoeken in namen en inhoud.</p>
+    <section class="search-panel" aria-label="Search">
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search for a term, e.g. CRL" aria-label="Search all projects" autocomplete="off" spellcheck="false"><kbd>⌘ K</kbd></label>
+      <label class="check"><input type="checkbox" id="case-sensitive">Case sensitive</label>
+      <p id="search-summary" role="status" aria-live="polite">Open your projects to search names and content.</p>
     </section>
     <div id="import-status" class="import-status" hidden><span id="import-label"></span><progress id="import-progress" max="1" value="0"></progress></div>
     <div id="errors" class="errors" role="alert" hidden></div>
     <section class="workspace" id="workspace">
-      <aside class="navigator" id="navigator" aria-label="Projectstructuur">
-        <div class="pane-heading"><h1>Projecten <span id="project-count" class="count">0</span></h1><button id="clear-projects" class="button quiet" disabled>Sluiten</button></div>
-        <div class="tree-tools"><span id="tree-description">Suite → case → step</span><button id="collapse" class="button quiet" disabled>Inklappen</button></div>
-        <div id="tree" role="tree" tabindex="0" aria-label="Projecten, testsuites, testcases en stappen"><div id="tree-spacer"></div><div id="tree-rows"></div></div>
-        <div id="tree-empty" class="tree-empty">Je geopende projecten verschijnen hier.</div>
-        <div class="navigator-footer" id="totals">SOAP UI XML-projecten</div>
+      <aside class="navigator" id="navigator" aria-label="Project structure">
+        <div class="pane-heading"><h1>Projects <span id="project-count" class="count">0</span></h1><button id="clear-projects" class="button quiet" disabled>Close</button></div>
+        <div class="tree-tools"><span id="tree-description">Suite → case → step</span><button id="collapse" class="button quiet" disabled>Collapse</button></div>
+        <div id="tree" role="tree" tabindex="0" aria-label="Projects, test suites, test cases and steps"><div id="tree-spacer"></div><div id="tree-rows"></div></div>
+        <div id="tree-empty" class="tree-empty">Your open projects will appear here.</div>
+        <div class="navigator-footer" id="totals">SoapUI XML projects</div>
       </aside>
-      <div id="sidebar-splitter" class="sidebar-splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Breedte van projectkolom" aria-controls="navigator" title="Sleep om de projectkolom breder of smaller te maken"></div>
-      <section id="detail" class="detail" aria-label="Inhoud van geselecteerd onderdeel">
+      <div id="sidebar-splitter" class="sidebar-splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Project column width" aria-controls="navigator" title="Drag to resize the project column"></div>
+      <section id="detail" class="detail" aria-label="Selected item content">
         <div class="welcome">
           <div class="file-symbol" aria-hidden="true">XML</div>
-          <h2>Vind de test achter de tekst.</h2>
-          <p>Sleep één of meerdere SOAP UI-projecten hierheen. Zoek in namen, Groovy-scripts, requests en properties, over alle projecten tegelijk.</p>
-          <button id="welcome-open" class="button primary">Kies XML-bestanden</button>
-          <button id="load-demo" class="button secondary">Probeer een voorbeeld met CRL</button>
-          <small>Je bestanden blijven lokaal. Via Recent kun je ze later heropenen. Zonder directe bestandstoegang bewaart de viewer hiervoor een kopie in je browser.</small>
+          <h2>Find the test behind the text.</h2>
+          <p>Drop one or more SoapUI projects here. Search names, Groovy scripts, requests and properties across all your projects.</p>
+          <button id="welcome-open" class="button primary">Choose XML files</button>
+          <button id="load-demo" class="button secondary">Try an example with CRL</button>
+          <small>Your files stay local. Use Recent to reopen them later. When direct file access is unavailable, the viewer saves a copy in your browser.</small>
         </div>
       </section>
     </section>
   </main>
   <dialog id="recents-dialog" class="recents-dialog" aria-labelledby="recents-title" aria-describedby="recents-note">
-    <div class="recents-heading"><h2 id="recents-title">Recente projecten</h2><button id="close-recents" class="button secondary">Sluiten</button></div>
-    <p id="recents-note">De laatste 10 projecten, bewaard in deze browser. Een origineel wordt opnieuw gelezen; een lokale kopie bevat de versie van de vermelde datum.</p>
+    <div class="recents-heading"><h2 id="recents-title">Recent projects</h2><button id="close-recents" class="button secondary">Close</button></div>
+    <p id="recents-note">The last 10 projects saved in this browser. Original files are read again when reopened; local copies contain the version saved on the date shown.</p>
     <p id="recents-status" role="status" aria-live="polite"></p>
     <div id="recents-list" class="recents-list"></div>
-    <div class="recents-footer"><button id="choose-current" class="button primary">Bestanden kiezen…</button><button id="forget-recents" class="button secondary">Recente lijst wissen</button></div>
-    <small>Wissen verwijdert ook bewaarde kopieën uit de browser. Je oorspronkelijke XML-bestanden blijven staan.</small>
+    <div class="recents-footer"><button id="choose-current" class="button primary">Choose files</button><button id="forget-recents" class="button secondary">Clear recent list</button></div>
+    <small>Clearing the list also removes saved copies from the browser. Your original XML files are kept.</small>
   </dialog>
-  <div class="drop-overlay" id="drop-overlay" hidden><div><strong>Laat je projecten hier los</strong><span>Meerdere XML-bestanden zijn welkom</span></div></div>
+  <div class="drop-overlay" id="drop-overlay" hidden><div><strong>Drop your projects here</strong><span>You can open multiple XML files at once</span></div></div>
   <script>/* APP_SCRIPT */</script>
 </body>
 </html>

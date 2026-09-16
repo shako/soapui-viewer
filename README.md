@@ -2,7 +2,7 @@
 
 Find the test behind the text. Search large **SoapUI XML projects** and see exactly which project, test suite, test case and test step contains each match.
 
-The viewer is a **single HTML file** that runs locally in your browser. No installation, server, internet connection, SoapUI installation or ReadyAPI license is needed to use it. The interface is currently in Dutch.
+The viewer is a **single HTML file** that runs locally in your browser. No installation, server, internet connection, SoapUI installation or ReadyAPI license is needed to use it. The interface is in English.
 
 [Nederlandse handleiding](README.nl.md) · [Download the viewer](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html) · [Releases](https://github.com/shako/soapui-viewer/releases)
 
@@ -10,10 +10,10 @@ The viewer is a **single HTML file** that runs locally in your browser. No insta
 
 1. Download **[SoapUI-Viewer.html](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)** from the latest release and keep it in a folder on your computer.
 2. Double-click it to open it in a recent desktop browser, such as Safari, Chrome, Edge or Firefox.
-3. Drop one or more complete SoapUI `.xml` project files onto the window, or click **Projecten openen**.
+3. Drop one or more complete SoapUI `.xml` project files onto the window, or click **Open projects**.
 4. Enter a search term, such as `CRL`. Select a result to see its full path and highlighted content.
 
-To try it without your own projects, click **Probeer een voorbeeld met CRL**. This opens two fictional projects bundled with the viewer.
+To try it without your own projects, click **Try an example with CRL**. This opens two fictional projects bundled with the viewer.
 
 You can also download the repository with **Code → Download ZIP**, extract it, and open `dist/index.html`. GitHub's source-file preview displays the HTML source; download the file before opening it.
 
@@ -22,9 +22,9 @@ You can also download the repository with **Code → Download ZIP**, extract it,
 - Searches across multiple projects at once, including names, Groovy scripts, requests, properties, assertions, setup/teardown scripts and other text values.
 - Keeps the project → suite → case → step hierarchy visible, showing matching branches and their parents.
 - Marks whether an item matches in its name, content, or both. Counts on a branch include its descendants without duplicating those matches as matches in the parent itself.
-- Offers **Toon alle … stappen** to reveal the other steps in a matching testcase for context.
+- Offers **Show all … steps** to reveal the other steps in a matching testcase for context.
 - Groups content fields with matches first, ordered by match count, and lets you jump between every occurrence.
-- Provides a resizable project column, an **Inklappen / Uitklappen** toggle, and recent projects.
+- Provides a resizable project column, a **Collapse / Expand** toggle, and recent projects.
 
 Search is literal, case-insensitive by default, with an optional case-sensitive mode. It is not a regular-expression search. Disabled test steps are included.
 
@@ -36,10 +36,10 @@ The viewer does not upload data, execute scripts, send requests from your projec
 
 For **Recent**, it stores up to ten entries in this browser's local IndexedDB:
 
-- **Heropenen** reads the original file again when the browser supports persistent file handles. The browser may request read permission again.
-- **Kopie openen** opens a locally saved copy when direct file access is unavailable. Its capture date is shown in the recent list and above the opened content. Re-select the original XML file to see changes made after that date.
+- **Reopen** reads the original file again when the browser supports persistent file handles. The browser may request read permission again.
+- **Open copy** opens a locally saved copy when direct file access is unavailable. Its capture date is shown in the recent list and above the opened content. Re-select the original XML file to see changes made after that date.
 
-**Verwijderen** or **Recente lijst wissen** removes the relevant entries and cached copies from browser storage. **Sluiten** closes the currently loaded projects while keeping the recent list. No project data or recent history is embedded in the HTML file you share with colleagues.
+**Remove** or **Clear recent list** removes the relevant entries and cached copies from browser storage. **Close** closes the currently loaded projects while keeping the recent list. No project data or recent history is embedded in the HTML file you share with colleagues.
 
 Storage is specific to the browser and the viewer's location. Moving or renaming the HTML file, changing browsers, using private browsing or clearing browser data may make the recent list unavailable. If storage is blocked or full, manual file opening still works and the viewer reports that it could not save a recent entry.
 
