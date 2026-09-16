@@ -1,6 +1,6 @@
 {
   "name": "soapui-viewer",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Offline viewer for searching large SoapUI XML projects across suites, cases, steps and scripts.",
   "license": "MIT",
   "repository": {

@@ -355,8 +355,10 @@ function renderTree() {
     name.title = node.name;
     const icon = el('span', `node-icon ${node.kind}`, icons[node.kind]);
     icon.setAttribute('aria-hidden', 'true');
-    row.append(arrow, icon, name);
-    if (node.disabled) row.append(el('span', 'disabled-label', 'off'));
+    const identity = el('span', 'node-identity');
+    identity.append(name);
+    row.append(arrow, icon, identity);
+    if (node.disabled) row.append(el('span', 'disabled-label', 'disabled'));
     if (state.query && hit?.own) {
       const label = hit.name && hit.content ? 'name + content' : hit.name ? 'name' : 'content';
       row.append(el('span', 'hit-kind', label));
@@ -381,7 +383,7 @@ function renderTree() {
     copy.tabIndex = state.selected === node.id ? 0 : -1;
     copy.title = 'Copy name';
     copy.setAttribute('aria-label', `Copy name: ${node.name}`);
-    row.append(copy);
+    identity.append(copy);
     row.addEventListener('click', () => {
       tree.focus({ preventScroll: true });
       state.selected = node.id;
