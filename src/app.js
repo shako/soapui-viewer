@@ -1,3 +1,4 @@
+import { setupComparison } from './compare-ui.js';
 import { matcher, visibleRows } from './core.js';
 import { demoProjects } from './demo.js';
 import { createRecentStore, readRecentFile } from './recents.js';
@@ -162,6 +163,7 @@ function reportError(message) {
 }
 
 worker.onmessage = ({ data }) => {
+  if (data.event === 'compare-progress') { comparison.progress(data); return; }
   if (data.event === 'progress') {
     $('import-label').textContent = `Reading ${data.fileName}… ${Math.round(data.progress * 100)}%`;
     $('import-progress').value = data.progress;
@@ -565,6 +567,22 @@ async function renderDetail() {
   await populateFields();
 }
 
+const comparison = setupComparison(rpc, copyText);
+let mode = 'viewer';
+function setMode(value) {
+  mode = value;
+  document.body.classList.toggle('compare-active', value === 'compare');
+  $('mode-viewer').setAttribute('aria-pressed', value === 'viewer');
+  $('mode-compare').setAttribute('aria-pressed', value === 'compare');
+  document.querySelector('.search-panel').hidden = value !== 'viewer';
+  $('workspace').hidden = value !== 'viewer';
+  $('open-files').hidden = $('open-recents').hidden = value !== 'viewer';
+  $('compare-view').hidden = value !== 'compare';
+}
+$('mode-viewer').addEventListener('click', () => setMode('viewer'));
+$('mode-compare').addEventListener('click', () => setMode('compare'));
+if (globalThis.SOAPUI_GIT) setMode('compare');
+
 $('open-files').addEventListener('click', () => chooseFiles().catch(error => reportError(error.message)));
 $('welcome-open').addEventListener('click', () => chooseFiles().catch(error => reportError(error.message)));
 $('open-recents').addEventListener('click', () => { $('recents-dialog').showModal(); refreshRecents(); });
@@ -643,12 +661,14 @@ $('tree').addEventListener('keydown', event => {
 document.addEventListener('keydown', event => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
+    setMode('viewer');
     $('search').focus();
     $('search').select();
   }
 });
 let dragDepth = 0;
 document.addEventListener('dragenter', event => {
+  if (mode === 'compare') return;
   if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); dragDepth++; $('drop-overlay').hidden = state.importing; }
 });
 document.addEventListener('dragover', event => {
@@ -662,8 +682,9 @@ document.addEventListener('drop', event => {
   event.preventDefault();
   dragDepth = 0;
   $('drop-overlay').hidden = true;
-  if (state.importing) return;
   const files = [...event.dataTransfer.files];
+  if (mode === 'compare') { comparison.drop(files); return; }
+  if (state.importing) return;
   // Capture every handle in the drop event itself, before the first await.
   const items = [...event.dataTransfer.items].filter(item => item.kind === 'file');
   const entries = items.map(item => ({

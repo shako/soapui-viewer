@@ -1,13 +1,40 @@
+import { parseComparisonFile, compareProjects, createXmlDiff, diffPage } from './compare-core.js';
 import { parseFile, searchNodes, describeNode, fieldPage } from './core.js';
 
 const nodes = new Map();
 let serial = 0;
+let comparison;
+let selectedDiff;
 let queue = Promise.resolve();
 
 async function handle({ id, action, ...data }) {
   try {
     let result;
-    if (action === 'import') {
+    if (action === 'compare') {
+      comparison = null;
+      selectedDiff = null;
+      const parse = file => file ? parseComparisonFile(file, progress => postMessage({ event: 'compare-progress', fileName: file.name, progress })) : null;
+      const before = await parse(data.before);
+      const after = await parse(data.after);
+      if (!before && !after) throw new Error('Choose at least one project version.');
+      comparison = compareProjects(before, after, data);
+      result = { ...comparison, entries: comparison.entries.map(({ left, right, ...entry }) => entry) };
+    } else if (action === 'compare-options') {
+      if (!comparison) throw new Error('Compare the project versions first.');
+      const { left, right } = comparison.entries[comparison.rootId];
+      comparison = compareProjects(left ? { root: left } : null, right ? { root: right } : null, data);
+      selectedDiff = null;
+      result = { ...comparison, entries: comparison.entries.map(({ left, right, ...entry }) => entry) };
+    } else if (action === 'compare-detail') {
+      const entry = comparison?.entries[data.nodeId];
+      if (!entry) throw new Error('Compare the project versions again.');
+      if (selectedDiff?.id !== entry.id || selectedDiff.original !== !!data.original) selectedDiff = { id: entry.id, original: !!data.original, ...createXmlDiff(entry, data) };
+      result = diffPage(selectedDiff, data.page, data.changesOnly);
+    } else if (action === 'compare-clear') {
+      comparison = null;
+      selectedDiff = null;
+      result = true;
+    } else if (action === 'import') {
       const project = await parseFile(data.file, `p${serial++}`, progress => {
         postMessage({ event: 'progress', fileName: data.file.name, progress });
       });

@@ -75,6 +75,25 @@ test('standalone HTML embeds a working worker: imports, errors, search, detail a
   const propertyValue = propertyFields.find(field => field.label.endsWith('value'));
   const propertyPage = await send('field', { nodeId: propertyProject.rootId, fieldIndex: propertyValue.index, query: 'CRL', caseSensitive: false, scope: 'property', page: { matchIndex: 0 } });
   assert.equal(propertyPage.total, 1);
+  const comparison = await send('compare', {
+    before: new File([demoProjects[0].xml], 'before.xml'),
+    after: new File([demoProjects[0].xml.replace('assert true', 'assert false')], 'after.xml'),
+  });
+  assert.equal(comparison.counts.modified, 4);
+  assert.ok(comparison.entries.every(entry => !('left' in entry) && !('right' in entry)), 'Only tree metadata crosses to the UI');
+  const changed = comparison.entries.find(entry => entry.kind === 'step' && entry.status === 'modified');
+  const diff = await send('compare-detail', { nodeId: changed.id, changesOnly: true });
+  assert.ok(diff.rows.some(row => row.right?.text.includes('assert false')));
+  const formatting = await send('compare-options', { includeFormatting: true });
+  assert.equal(formatting.counts.modified, 4);
+  const original = await send('compare-detail', { nodeId: changed.id, original: true, changesOnly: true });
+  assert.ok(original.rows.some(row => row.right?.text.includes('assert false')));
+  await send('compare-clear');
+  await assert.rejects(send('compare-detail', { nodeId: changed.id }), /Compare the project/);
+  await assert.rejects(send('compare', { before: new File(['<broken>'], 'bad.xml'), after: null }));
+  const added = await send('compare', { before: null, after: new File([demoProjects[0].xml], 'added.xml') });
+  assert.equal(added.counts.added, first.nodes.length);
+  await send('compare-clear');
   await send('clear');
   assert.equal((await send('search', { query: 'CRL' })).occurrences, 0);
 });

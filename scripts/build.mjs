@@ -11,7 +11,7 @@ const css = await readFile('src/style.css', 'utf8');
 const ownLicense = await readFile('LICENSE', 'utf8');
 const notices = await readFile('THIRD-PARTY-LICENSES.txt', 'utf8');
 const xmlcharsLicense = await readFile('node_modules/xmlchars/LICENSE', 'utf8');
-const licenseComment = `<!-- SoapUI Viewer\n${ownLicense}\n\nIncluded libraries: saxes 6.0.0 and xmlchars 2.2.0\n${notices}\n\nxmlchars:\n${xmlcharsLicense}\n-->`;
+const licenseComment = `<!-- SoapUI Viewer\n${ownLicense}\n\nIncluded libraries: saxes 6.0.0 and xmlchars 2.2.0, diff 8.0.4\n${notices}\n\nxmlchars:\n${xmlcharsLicense}\n-->`;
 const safeScript = app.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 await mkdir('dist', { recursive: true });
 await writeFile('dist/index.html', template.replace('</head>', () => `${licenseComment}\n</head>`).replace('/* APP_STYLES */', () => css).replace('/* APP_SCRIPT */', () => safeScript));

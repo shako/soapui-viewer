@@ -32,6 +32,50 @@ Klik ergens op een project-, suite- of caserij om die open of dicht te klappen e
 
 Bij hover verschijnt **Copy** om de volledige naam te kopiëren, zonder de selectie of uitgeklapte takken te wijzigen. Op een aanraakscherm is de knop altijd zichtbaar. Via het toetsenbord: selecteer een rij met de pijltjestoetsen, druk Tab om **Copy** te bereiken en Enter of spatie om te kopiëren.
 
+## Twee versies vergelijken
+
+De huidige broncode en lokale `dist/index.html` bevatten de nieuwe modus **Compare**, naast **Viewer**. Een eerder gedownloade release kan nog ouder zijn.
+
+1. Open **Compare**. Instellingen, filters en aantallen staan in de linkerkolom; rechts krijgt de XML-diff de beschikbare hoogte. Sleep één volledig XML-project op **Before** en één op **After**. Met **Choose XML** kan het ook. Controleer de bestandsnamen; **⇄** wisselt de twee kanten.
+2. Klik **Compare**. **Comparison setup** klapt daarna automatisch dicht; klik erop om opnieuw versies te kiezen. Standaard staat **Only changes** aan: je ziet alleen gewijzigde takken. Zet dit uit om ook ongewijzigde onderdelen te bekijken.
+3. Klik een suite, case of step. Je ziet wat toegevoegd, verwijderd of gewijzigd is, inclusief wijzigingen in de volgorde van steps. De status van een parent telt wijzigingen in de children mee.
+4. **Include formatting changes** staat standaard uit. Zet dit aan om ook attribuutvolgorde, inspringing, quotes, CDATA-schrijfwijze en lege-elementnotatie te vergelijken. Takken met alleen zulke verschillen krijgen **≈ Formatting**. De bestanden worden hiervoor niet opnieuw ingelezen.
+5. Rechts staat de geformatteerde XML naast elkaar, met rood voor vóór en groen voor na. **Show unchanged XML lines** toont alle context. Grote fragmenten hebben pagina's; **↳** vervolgt een lange regel. Er wordt geen inhoud afgekapt. De XML scrolt apart; paginaknoppen blijven onderaan. Extra uitleg en child-links staan onder **Details and changed children**.
+
+Bij een suite/case/project toont de XML-weergave de **eigen** properties, attributen, scripts en instellingen. Onderliggende suites/cases/steps staan apart in de boom en de lijst met gewijzigde children. Bij een step zie je de volledige XML van die step. De fragmenten zijn bedoeld om te lezen, niet als export of patch. **Show original XML (including formatting)** toont de originele gedecodeerde XML van dat onderdeel en staat automatisch aan bij **≈ Formatting**. Spaties, tabs en carriage returns worden zichtbaar als **·**, **⇥** en **␍**. Onderliggende hierarchy-items blijven apart; XML-declaraties en commentaar buiten de projectroot worden niet vergeleken. Werkelijke waarden, ID's en scriptspaties blijven standaard significant.
+
+**Try an example** toont fictieve wijzigingen. De bestanden voor Compare blijven alleen in het geheugen; **Clear** sluit ze. Ze worden niet toegevoegd aan Recent. Je kunt tussen Viewer en Compare wisselen zonder hun toestand kwijt te raken.
+
+Matching gebruikt eerst unieke SoapUI-ID's en daarna unieke namen onder dezelfde parent. Hernoemingen met een stabiel ID blijven één gewijzigd onderdeel. Bij onduidelijke dubbele namen, een hernoeming zonder ID of een verplaatsing naar een andere parent kan iets als verwijderd en toegevoegd verschijnen. XML-inspringing en attribuutvolgorde worden genegeerd; scriptspaties en tekstwaarden blijven significant. Zie de [Engelse handleiding](README.md#compare-two-project-versions) voor de precieze normalisatie en beperkingen.
+
+De schaaltest vergelijkt twee synthetische bestanden van elk **27,9 MiB**, met 12.000 steps per versie. Dit is een functionele Node-test, geen browserbenchmark.
+
+## Git-versies vergelijken (optioneel)
+
+Start de lokale Git-helper vanuit de SoapUI Viewer-repositorymap:
+
+```sh
+npm run compare:git
+```
+
+De browser opent de vergelijker. Vul bij **Git repository folder** jouw Git-map in en klik **Open**. Slepen of vooraf bestanden exporteren is niet nodig. Je kunt de map ook bij het starten meegeven:
+
+```sh
+npm run compare:git -- "/volledig/pad/naar/jouw-gitmap"
+```
+
+Hiervoor zijn **Node.js 22+ en Git** nodig. Met de meegeleverde HTML hoef je niet te builden of `npm install` uit te voeren. Een XML-bestand als startargument blijft ook werken en selecteert dat bestand vooraf.
+
+- Kies onder **Before** en **After** elk een **Version**: HEAD, de opgeslagen werkversie, een lokale branch, een reeds aanwezige remote branch of een tag. In een featurebranch wordt aanvankelijk main/master tegenover die featurebranch voorgesteld; anders HEAD tegenover de werkversie.
+- Bij **Project file** kies of typ je het XML-pad binnen de repository. De suggesties komen uit de gekozen versie. Maak het veld leeg of typ een deel van de naam om andere bestanden te vinden. Ook bestanden die alleen op een andere branch bestaan zijn zo bereikbaar.
+- **Use the same file path on both sides** staat standaard aan. De rechterkant volgt het linker bestandspad. Ontbreekt het bestand op de andere branch, dan krijg je een melding; vergelijken toont de toevoeging/verwijdering.
+- Wil je een hernoemd of ander bestand vergelijken, zet die optie uit en kies elk pad afzonderlijk. **Swap** wisselt branches én bestandspaden. Er wordt niet automatisch geraden naar hernoemingen.
+- Klik **Compare**. De ingelezen Git-versies tonen hun commit-hash in de instellingen. Open dezelfde repository opnieuw om de branchlijst te vernieuwen, of voer een andere map in.
+
+De werkversie bevat opgeslagen bestanden, inclusief niet-gecommitte XML die niet door Git wordt genegeerd. Genegeerde XML kun je via een expliciet pad kiezen. De bestandslijst bevat XML-kandidaten; bij vergelijken wordt gecontroleerd of het volledige SoapUI-projecten zijn. Dit blijft een vergelijking van twee gekozen bestanden, geen directorycompare.
+
+De repository wordt niet gewijzigd: geen checkout, fetch of uitvoering van scripts. Stop met **Ctrl+C**. De helper luistert alleen op `127.0.0.1` met een tijdelijke poort en sessielink. Alleen reguliere XML-bestanden binnen de gekozen repository kunnen gelezen worden (tot 256 MiB); symlinks, paden buiten de repository en `.git` zijn uitgesloten. De losse HTML zonder helper blijft werken met handmatig gekozen bestanden.
+
 ## Recente bestanden heropenen
 
 Via **Recent** open je de laatste 10 projecten opnieuw, ook na het sluiten en opnieuw openen van de viewer.
@@ -45,7 +89,7 @@ Deze opslag hoort bij de browser en de locatie van de viewer. Een andere browser
 
 ## Bestanden en privacy
 
-- Zoeken en uitlezen gebeuren in het geheugen van de browser. Voor **Recent** bewaart de viewer een bestandsverwijzing of een lokale kopie in IndexedDB. De viewer verstuurt geen data en heeft geen externe scripts, fonts, analytics of API's. De ingebouwde Content Security Policy blokkeert netwerkverbindingen.
+- Zoeken en uitlezen gebeuren in het geheugen van de browser. Voor **Recent** bewaart de viewer een bestandsverwijzing of een lokale kopie in IndexedDB. De viewer verstuurt geen data en heeft geen externe scripts, fonts, analytics of API's. De ingebouwde Content Security Policy van de losse HTML blokkeert netwerkverbindingen. De optionele Git-starter laat alleen zijn lokale oorsprong toe.
 - De viewer leest bestanden en voert geen Groovy-scripts of requests uit. Je oorspronkelijke XML-bestanden worden niet gewijzigd.
 - Je kunt meerdere projecten tegelijk openen of later toevoegen. **Close** sluit alle geopende projecten; de recente lijst blijft behouden. Na herladen kun je bestanden opnieuw kiezen of via **Recent** heropenen.
 - Eén volledig XML-bestand per project wordt ondersteund. Composite projecten met losse bestanden per suite/case moeten eerst als één volledig XML-project geëxporteerd worden. Versleutelde projecten moeten eerst ontsleuteld worden. XML met DTD's wordt afgewezen.
@@ -66,7 +110,7 @@ De broncode en releases staan op [GitHub](https://github.com/shako/soapui-viewer
 
 ## Zelf bouwen
 
-Alleen voor ontwikkeling is Node.js 22 of hoger nodig:
+Voor ontwikkeling en de optionele Git-starter is Node.js 22 of hoger nodig. Om zelf te bouwen:
 
 ```sh
 npm ci
@@ -74,7 +118,7 @@ npm test
 npm run build
 ```
 
-De uitvoer is opnieuw één zelfstandig bestand: `dist/index.html`. De runtime gebruikt saxes 6.0.0 en xmlchars 2.2.0; esbuild is uitsluitend een bouwafhankelijkheid.
+De uitvoer is opnieuw één zelfstandig bestand: `dist/index.html`. De runtime gebruikt saxes 6.0.0, xmlchars 2.2.0 en jsdiff 8.0.4; esbuild is uitsluitend een bouwafhankelijkheid.
 
 `src/core.js` bevat de parser en zoeklogica; `src/worker.js` de achtergrondtaak; `src/app.js` de interface; `src/recents.js` de recente bestanden; `src/splitter.js` de kolombreedte. De tests controleren onder andere namespaces, streaming, encodings, CDATA, correcte toewijzing aan suites/cases/steps, grote bestanden en de worker in het gebouwde HTML-bestand. De recente opslag wordt getest met fake-indexeddb (alleen een testafhankelijkheid), inclusief heropenen in een nieuwe sessie, bewaren van een kopie groter dan 23 MB, deduplicatie en verwijderen. Browserafhankelijke toestemming voor originele bestanden is getest met gesimuleerde handles; daadwerkelijke browserrechten zijn niet automatisch geverifieerd.
 
@@ -82,12 +126,7 @@ Browsers die de experimentele WebMCP-interface aanbieden krijgen optioneel dezel
 
 ## Toekomstige richting
 
-Een vergelijking op basis van de SoapUI-structuur past in deze repository. Dit is nog niet geïmplementeerd:
-
-1. Twee volledige XML-projectbestanden vergelijken en toegevoegde, verwijderde en gewijzigde suites, cases en steps tonen, met tekstverschillen in scripts en requests.
-2. Dezelfde vergelijking eventueel gebruiken vanuit een commandlinetool die twee Git-versies uitleest en een leesbaar tekstrapport of viewer-rapport maakt.
-
-De XML-parser en vergelijkingslogica kunnen worden gedeeld tussen viewer en commandlinetool. Matching bij hernoemingen en verplaatsingen, gewijzigde stapvolgorde en het negeren van onbelangrijke XML-opmaak vragen een afzonderlijk ontwerp. De eerste release bevat alleen de zoekviewer.
+Viewer en Compare zitten in dezelfde repository en HTML, met aparte modules voor de vergelijking. Mogelijke vervolgstappen zijn een tekstrapport voor PR's, kiezen uit de commitgeschiedenis, matching van verplaatsingen tussen parents en filters voor automatisch gegenereerde metadata.
 
 ## Licentie
 

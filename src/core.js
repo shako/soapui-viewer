@@ -1,8 +1,8 @@
 import { SaxesParser } from 'saxes';
 
-const SOAP_NS = 'http://eviware.com/soapui/config';
-const kinds = { 'soapui-project': 'project', testSuite: 'suite', testCase: 'case', testStep: 'step' };
-const parents = { suite: 'project', case: 'suite', step: 'case' };
+export const SOAP_NS = 'http://eviware.com/soapui/config';
+export const kinds = { 'soapui-project': 'project', testSuite: 'suite', testCase: 'case', testStep: 'step' };
+export const parents = { suite: 'project', case: 'suite', step: 'case' };
 
 export function createProjectParser(fileName, prefix) {
   const parser = new SaxesParser({ xmlns: true });
@@ -83,9 +83,12 @@ export function detectEncoding(bytes) {
 }
 
 export async function parseFile(file, prefix, onProgress = () => {}) {
+  return readXmlFile(file, createProjectParser(file.name, prefix), onProgress);
+}
+
+export async function readXmlFile(file, parser, onProgress = () => {}) {
   const header = new Uint8Array(await file.slice(0, 256).arrayBuffer());
   const decoder = new TextDecoder(detectEncoding(header), { fatal: true });
-  const parser = createProjectParser(file.name, prefix);
   const chunkSize = 256 * 1024;
   for (let offset = 0; offset < file.size; offset += chunkSize) {
     const bytes = await file.slice(offset, offset + chunkSize).arrayBuffer();
