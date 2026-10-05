@@ -88,6 +88,16 @@ test('standalone HTML embeds a working worker: imports, errors, search, detail a
   assert.equal(formatting.counts.modified, 4);
   const original = await send('compare-detail', { nodeId: changed.id, original: true, changesOnly: true });
   assert.ok(original.rows.some(row => row.right?.text.includes('assert false')));
+  const identityXml = '<soapui-project name="P"><testSuite name="S"><testCase name="C"><testStep name="A" id="old"/></testCase></testSuite></soapui-project>';
+  const identities = await send('compare', { before: new File([identityXml], 'ids-before.xml'), after: new File([identityXml.replace('id="old"', 'id="new"')], 'ids-after.xml') });
+  assert.equal(identities.counts.modified, 0);
+  const identityStep = identities.entries.find(entry => entry.kind === 'step');
+  assert.equal((await send('compare-detail', { nodeId: identityStep.id, changesOnly: true })).rows.length, 0);
+  const withIds = await send('compare-options', { includeIds: true });
+  assert.equal(withIds.counts.modified, 4);
+  assert.ok((await send('compare-detail', { nodeId: identityStep.id, changesOnly: true })).rows.some(row => row.right?.text.includes('id="new"')));
+  await send('compare-options', { includeIds: false });
+  assert.equal((await send('compare-detail', { nodeId: identityStep.id, changesOnly: true })).rows.length, 0, 'Changing ID options invalidates the cached diff');
   await send('compare-clear');
   await assert.rejects(send('compare-detail', { nodeId: changed.id }), /Compare the project/);
   await assert.rejects(send('compare', { before: new File(['<broken>'], 'bad.xml'), after: null }));

@@ -1,5 +1,6 @@
 import { setupSplitter } from './splitter.js';
 import { demoProjects } from './demo.js';
+import { setupVersionPicker } from './git-version-picker.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
@@ -21,7 +22,11 @@ export function setupComparison(rpc, copyText) {
   let files = { before: null, after: null };
   let result, selected, busy = false, rows = [], collapsed = new Set(), ticket = 0;
   let git = globalThis.SOAPUI_GIT;
+  let filePickerSide;
   const paths = { before: [], after: [] };
+  const pickers = Object.fromEntries(['before', 'after'].map(side => [side, setupVersionPicker(side, () => {
+    $('git-' + side).dispatchEvent(new Event('change', { bubbles: true }));
+  })]));
   const error = message => { $('compare-error').textContent = message; $('compare-error').hidden = !message; };
   const guard = action => (...args) => {
     try { Promise.resolve(action(...args)).catch(e => error(e.message)); } catch (e) { error(e.message); }
@@ -32,28 +37,47 @@ export function setupComparison(rpc, copyText) {
     $('compare-settings').setAttribute('open', '');
     result = null;
     selected = null;
+    $('compare-navigator').classList.remove('has-comparison');
     $('compare-tree-spacer').style.height = '0px';
     $('compare-tree-rows').replaceChildren();
-    $('compare-detail').replaceChildren(el('div', 'welcome', 'Choose a before and after version, then select Compare.'));
+    $('compare-detail').replaceChildren(el('div', 'welcome', workingComparison() ? 'Choose your working file and the comparison branch, then select Compare.' : 'Choose a before and after version, then select Compare.'));
     $('compare-summary').textContent = 'Compare the same project at two points in time.';
     $('compare-collapse').disabled = true;
   }
   const versionName = side => git?.refs?.find(ref => ref.value === $('git-' + side).value)?.label || 'XML file';
+  const workingComparison = () => git?.repository && $('git-after').value === 'WORKTREE' && $('git-before').value !== 'file';
   function fileLabels() {
+    const working = workingComparison();
+    $('compare-before-title').textContent = working ? '2. Compare with' : 'Before';
+    $('compare-after-title').textContent = working ? '1. Current working copy' : 'After';
+    $('git-version-label-before').textContent = working ? 'Branch' : 'Version';
+    $('git-version-after').hidden = !git?.repository || working;
+    $('git-matches-after').hidden = !git?.repository || working;
+    $('git-same-path-label').hidden = !git?.repository || working;
+    $('git-use-working-path').hidden = !working || $('git-same-path').checked;
+    $('compare-swap').hidden = working;
+    $('compare-demo').hidden = working;
+    const first = $(working ? 'drop-after' : 'drop-before'), second = $(working ? 'drop-before' : 'drop-after');
+    if (first.nextElementSibling !== second) $('compare-inputs').insertBefore(first, second);
     for (const side of ['before', 'after']) {
       const fromGit = git?.repository && $('git-' + side).value !== 'file';
       const path = $('git-path-' + side).value;
-      $('git-path-label-' + side).hidden = !fromGit;
+      $('choose-' + side).textContent = working && side === 'before' ? 'Choose a different file' : fromGit ? $('git-' + side).value === 'WORKTREE' ? 'Choose working file' : 'Choose from Git' : 'Choose local XML';
+      $('git-path-label-' + side).hidden = !fromGit || (working && side === 'before' && $('git-same-path').checked);
       $('compare-' + side + '-name').textContent = fromGit
-        ? !path ? 'Choose or type a project path.' : paths[side].includes(path) ? `${paths[side].length} XML files in this version` : 'Not listed in this version. Compare as absent, or choose another path.'
+        ? !path ? 'Choose a SoapUI file from this version, or type its repository path.' : paths[side].includes(path) ? `${paths[side].length} XML files in this version${$('git-' + side).value === 'WORKTREE' ? ' · Includes saved, uncommitted changes.' : ''}` : 'Not listed in this version. Check the file path before comparing.'
         : files[side]?.name || 'Drop one XML file here or choose a file';
+      if (working && side === 'after') $('compare-after-name').textContent = `${versionName('after')} · ${path && !paths.after.includes(path) ? 'File not found in the working-copy list. Check the file path before comparing.' : 'Includes saved, uncommitted changes.'}`;
+      if (working && side === 'before' && $('git-same-path').checked) $('compare-before-name').textContent = !path
+        ? 'Uses the same file you choose above.'
+        : paths.before.includes(path) ? `Same file: ${path}` : `File not found on this branch: ${path}. Choose another branch or a different file.`;
     }
     const description = side => $('git-' + side).value !== 'file' && git?.repository
       ? `${versionName(side)} · ${$('git-path-' + side).value || 'Choose a file'}` : files[side]?.name || 'Choose XML';
     const summary = $('compare-source-summary');
     summary.textContent = `${description('before')} → ${description('after')}`;
     summary.title = summary.textContent;
-    $('git-path-after').disabled = busy || ($('git-same-path').checked && $('git-after').value !== 'file');
+    $('git-path-after').disabled = busy || (!working && $('git-same-path').checked && $('git-after').value !== 'file');
   }
   async function gitJSON(route, options) {
     const response = await fetch(git.base + route, { cache: 'no-store', ...options });
@@ -63,50 +87,87 @@ export function setupComparison(rpc, copyText) {
   async function loadPaths(side) {
     const ref = $('git-' + side).value;
     paths[side] = [];
-    $('git-files-' + side).replaceChildren();
     if (!git?.repository || ref === 'file') return;
     const data = await gitJSON(`files?repository=${encodeURIComponent(git.repository)}&ref=${encodeURIComponent(ref)}`);
     paths[side] = data.paths;
-    filterPathChoices(side);
   }
-  function filterPathChoices(side) {
-    const query = $('git-path-' + side).value.toLowerCase();
-    const list = document.createDocumentFragment();
-    // Keep native suggestions usable in repositories with thousands of XML files.
-    // Typing narrows the list, and any relative XML path can also be entered.
-    for (const path of paths[side].filter(path => path.toLowerCase().includes(query)).slice(0, 200)) {
-      const option = el('option'); option.value = path; list.append(option);
-    }
-    $('git-files-' + side).replaceChildren(list);
-  }
-  function linkPaths() {
-    if ($('git-same-path').checked) $('git-path-after').value = $('git-path-before').value;
-    for (const side of ['before', 'after']) filterPathChoices(side);
+  function linkPaths(source = workingComparison() ? 'after' : 'before') {
+    if ($('git-same-path').checked) $('git-path-' + (source === 'before' ? 'after' : 'before')).value = $('git-path-' + source).value;
     fileLabels();
   }
+  function renderGitFiles() {
+    const query = $('git-file-search').value.trim().toLowerCase();
+    const matches = paths[filePickerSide].filter(path => path.toLowerCase().includes(query));
+    const shown = matches.slice(0, 200);
+    $('git-file-count').textContent = !matches.length ? 'No XML files match this search.' : `${matches.length} XML files${matches.length > shown.length ? ' · Showing the first 200. Type more to narrow the list.' : ''}`;
+    const list = document.createDocumentFragment();
+    for (const path of shown) {
+      const choose = button('', () => {
+        const side = filePickerSide;
+        if (workingComparison() && side === 'before') $('git-same-path').checked = false;
+        $('git-path-' + side).value = path;
+        linkPaths(side); invalidate(); error('');
+        $('git-file-dialog').close();
+      });
+      choose.append(el('strong', '', path.split('/').pop()), el('span', '', path));
+      choose.title = path; list.append(choose);
+    }
+    $('git-file-list').replaceChildren(list);
+    $('git-file-list').scrollTop = 0;
+  }
+  function chooseFile(side) {
+    if (busy) return;
+    if (!git?.repository || $('git-' + side).value === 'file') { $('input-' + side).click(); return; }
+    filePickerSide = side;
+    $('git-file-version').textContent = `${side === 'before' ? 'Before' : 'After'} · ${versionName(side)}`;
+    $('git-file-note').textContent = $('git-' + side).value === 'WORKTREE'
+      ? 'Files in the checked-out working copy, including saved, uncommitted changes.'
+      : 'Files stored in this Git version. No checkout required.';
+    $('git-file-linked').textContent = workingComparison()
+      ? side === 'before' ? 'Choose a different file on the comparison branch. Your working file stays unchanged.' : 'The same file path is used on the comparison branch unless you choose a different file there.'
+      : $('git-same-path').checked ? 'The selected path will be used on both sides. Turn off “Use the same file path on both sides” to choose different paths.' : '';
+    $('git-file-search').value = git.folderPrefix ? `${git.folderPrefix}/` : '';
+    renderGitFiles();
+    $('git-file-dialog').showModal();
+    $('git-file-search').focus();
+  }
+  $('git-file-search').addEventListener('input', renderGitFiles);
+  $('git-file-search').addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter') {
+      event.preventDefault();
+      const first = $('git-file-list').querySelector('button');
+      if (event.key === 'ArrowDown') first?.focus();
+      else if ($('git-file-list').children.length === 1) first?.click();
+    }
+  });
+  $('git-file-close').addEventListener('click', () => $('git-file-dialog').close());
   async function configureGit(context) {
     git = { ...context, base: git.base };
-    $('git-repository').value = git.repository;
+    $('git-repository').value = git.folder || git.repository;
+    $('git-repository-root').hidden = !git.folder || git.folder === git.repository;
+    $('git-repository-root').textContent = `This folder belongs to the Git repository: ${git.repository}`;
     $('git-note').hidden = false;
-    $('git-note').textContent = `Current branch: ${git.branch || 'Detached HEAD'}. Local versions only; no checkout or fetch.`;
+    const branches = git.refs.filter(ref => /^refs\/(heads|remotes)\//.test(ref.value));
+    $('git-note').textContent = `Current branch: ${git.branch || 'Detached HEAD'}.${branches.length === 1 ? ' This repository has only one branch. For branches from another repository, open that repository’s folder.' : ' Local branches and remote branches already available on disk.'}`;
+    $('git-show-merged-label').hidden = !git.refs.some(ref => ref.merged && ![git.baseRef, `refs/heads/${git.branch}`].includes(ref.value));
+    $('git-show-merged-label').title = git.baseRef ? `Merged means included in ${git.baseRef.replace(/^refs\/(heads|remotes)\//, '')}. This does not use pull-request status.` : '';
+    $('git-show-merged').checked = false;
     $('git-same-path-label').hidden = false;
     $('git-same-path').checked = true;
     for (const side of ['before', 'after']) {
-      const select = $('git-' + side);
-      select.parentElement.hidden = false;
-      const local = el('option', '', 'XML file'); local.value = 'file';
-      select.replaceChildren(local);
-      for (const ref of git.refs) { const option = el('option', '', ref.label); option.value = ref.value; select.append(option); }
+      $('git-version-' + side).hidden = false;
+      pickers[side].update(git, false);
+      $('git-matches-' + side).hidden = false;
     }
     const baseline = ['refs/heads/main', 'refs/heads/master'].find(ref => git.refs.some(item => item.value === ref));
     const current = `refs/heads/${git.branch}`;
     const branchComparison = !git.path && baseline && current !== baseline && git.refs.some(item => item.value === current);
-    $('git-before').value = branchComparison ? baseline : 'HEAD';
-    $('git-after').value = branchComparison ? current : 'WORKTREE';
+    pickers.before.setValue(branchComparison ? baseline : 'HEAD');
+    pickers.after.setValue('WORKTREE');
     await Promise.all(['before', 'after'].map(loadPaths));
-    const afterPaths = new Set(paths.after);
-    $('git-path-before').value = git.path || paths.before.find(path => afterPaths.has(path)) || paths.before[0] || paths.after[0] || '';
+    $('git-path-after').value = git.path || '';
     linkPaths();
+    $('compare-detail').replaceChildren(el('div', 'welcome', 'Choose a file from your current working copy, then choose the branch to compare with. The same file path is used automatically.'));
   }
   $('git-open-repository').addEventListener('click', guard(async () => {
     if (busy) return;
@@ -120,19 +181,23 @@ export function setupComparison(rpc, copyText) {
   $('git-repository').addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); $('git-open-repository').click(); }
   });
+  $('git-show-merged').addEventListener('change', () => {
+    for (const side of ['before', 'after']) pickers[side].update(git, $('git-show-merged').checked);
+  });
   $('git-same-path').addEventListener('change', () => { linkPaths(); invalidate(); });
+  $('git-use-working-path').addEventListener('click', () => { $('git-same-path').checked = true; linkPaths(); invalidate(); error(''); });
   for (const side of ['before', 'after']) {
-    $('git-path-' + side).addEventListener('input', () => { linkPaths(); invalidate(); error(''); });
+    $('git-path-' + side).addEventListener('input', () => { linkPaths(side); invalidate(); error(''); });
   }
   function setFile(side, list) {
     if (busy || !list.length) return;
     if (list.length !== 1) { error('Drop one project version on each side.'); return; }
     files[side] = list[0];
-    $('git-' + side).value = 'file';
+    pickers[side].setValue('file');
     fileLabels(); invalidate(); error('');
   }
   for (const side of ['before', 'after']) {
-    $('choose-' + side).addEventListener('click', () => $('input-' + side).click());
+    $('choose-' + side).addEventListener('click', () => chooseFile(side));
     $('input-' + side).addEventListener('change', event => { setFile(side, [...event.target.files]); event.target.value = ''; });
     const zone = $('drop-' + side);
     zone.addEventListener('dragover', event => { event.preventDefault(); zone.classList.add('dragging'); });
@@ -143,6 +208,7 @@ export function setupComparison(rpc, copyText) {
     });
     $('git-' + side).addEventListener('change', guard(async () => {
       if (busy) return;
+      pickers[side].setValue($('git-' + side).value);
       invalidate(); error(''); setBusy(true);
       $('compare-progress-label').textContent = 'Listing XML files…';
       try { await loadPaths(side); linkPaths(); } finally { setBusy(false); }
@@ -153,8 +219,9 @@ export function setupComparison(rpc, copyText) {
     for (const input of $('compare-inputs').querySelectorAll('button, input, select')) input.disabled = value;
     $('compare-clear').disabled = value;
     $('compare-formatting').disabled = value;
+    $('compare-ids').disabled = value;
     $('compare-progress').hidden = !value;
-    $('git-path-after').disabled = value || ($('git-same-path').checked && $('git-after').value !== 'file');
+    $('git-path-after').disabled = value || (!workingComparison() && $('git-same-path').checked && $('git-after').value !== 'file');
   }
   async function source(side) {
     const ref = $('git-' + side).value;
@@ -165,7 +232,10 @@ export function setupComparison(rpc, copyText) {
     const path = $('git-path-' + side).value;
     if (!path) throw new Error(`Choose the ${side} project file.`);
     const response = await fetch(`${git.base}file?repository=${encodeURIComponent(git.repository)}&ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}`, { cache: 'no-store' });
-    if (response.status === 204) { $('compare-' + side + '-name').textContent = `${path} · ${versionName(side)} · file not present`; return null; }
+    if (response.status === 204) {
+      $('compare-' + side + '-name').textContent = `${path} · ${versionName(side)} · file not found`;
+      throw new Error(`Cannot compare: "${path}" was not found in ${versionName(side)} (repository: ${git.repository}). Choose another branch or file, or open the correct repository. Both files must exist to compare their contents.`);
+    }
     if (!response.ok) throw new Error(await response.text());
     const revision = response.headers.get('X-Soapui-Revision');
     const name = `${path} · ${versionName(side)}${revision ? ` · ${revision.slice(0, 12)}` : ''}`;
@@ -177,8 +247,9 @@ export function setupComparison(rpc, copyText) {
     invalidate(); error(''); setBusy(true);
     $('compare-progress-label').textContent = 'Reading project versions…';
     try {
+      if (workingComparison() && !$('git-path-after').value) throw new Error('Choose a file from the current working copy first.');
       const before = await source('before'), after = await source('after');
-      result = await rpc('compare', { before, after, includeFormatting: $('compare-formatting').checked });
+      result = await rpc('compare', { before, after, includeFormatting: $('compare-formatting').checked, includeIds: $('compare-ids').checked });
       collapsed.clear();
       selected = result.rootId;
       summarize();
@@ -190,26 +261,32 @@ export function setupComparison(rpc, copyText) {
     } finally { setBusy(false); }
   }
   function summarize() {
+    $('compare-navigator').classList.add('has-comparison');
     const c = result.counts, k = result.kindsChanged;
     $('compare-summary').textContent = `${c.added} added · ${c.removed} removed · ${c.modified} changed${result.formattingCount ? ` (${result.formattingCount} formatting-only)` : ''} · Affected: ${k.project} project, ${k.suite} suites, ${k.case} cases, ${k.step} steps`;
   }
-  $('compare-formatting').addEventListener('change', guard(async () => {
+  const updateOptions = guard(async () => {
     if (!result || busy) return;
     setBusy(true); error('');
     $('compare-progress-label').textContent = 'Updating comparison…';
     try {
-      result = await rpc('compare-options', { includeFormatting: $('compare-formatting').checked });
+      const previous = result.entries[selected], count = result.entries.length;
+      result = await rpc('compare-options', { includeFormatting: $('compare-formatting').checked, includeIds: $('compare-ids').checked });
+      if (result.entries.length !== count || result.entries[selected]?.name !== previous?.name) { selected = result.rootId; collapsed.clear(); }
       summarize();
       $('compare-tree').scrollTop = 0;
       refreshRows();
       await showDetail();
     } finally { setBusy(false); }
-  }));
+  });
+  $('compare-formatting').addEventListener('change', updateOptions);
+  $('compare-ids').addEventListener('change', updateOptions);
   $('compare-run').addEventListener('click', guard(compare));
   $('compare-swap').addEventListener('click', () => {
     [files.before, files.after] = [files.after, files.before];
-    const a = $('git-before'), b = $('git-after');
-    [a.value, b.value] = [b.value, a.value];
+    const beforeRef = $('git-before').value, afterRef = $('git-after').value;
+    pickers.before.setValue(afterRef);
+    pickers.after.setValue(beforeRef);
     const pathA = $('git-path-before'), pathB = $('git-path-after');
     [pathA.value, pathB.value] = [pathB.value, pathA.value];
     [paths.before, paths.after] = [paths.after, paths.before];
@@ -217,7 +294,10 @@ export function setupComparison(rpc, copyText) {
   });
   $('compare-clear').addEventListener('click', guard(async () => {
     files = { before: null, after: null };
-    $('git-before').value = $('git-after').value = 'file';
+    if (git?.repository) {
+      setBusy(true);
+      try { await configureGit({ ...git, path: '' }); } finally { setBusy(false); }
+    } else for (const side of ['before', 'after']) pickers[side].setValue('file');
     fileLabels(); invalidate(); error('');
     await rpc('compare-clear');
   }));
@@ -227,11 +307,17 @@ export function setupComparison(rpc, copyText) {
       .replace('log.info', 'log.warn')
       .replace('</con:testCase>', '<con:testStep name="New verification" type="groovy"><con:config><con:script>assert true</con:script></con:config></con:testStep></con:testCase>');
     files = { before: new File([before], 'example-before.xml'), after: new File([after], 'example-after.xml') };
-    $('git-before').value = $('git-after').value = 'file';
+    for (const side of ['before', 'after']) pickers[side].setValue('file');
     fileLabels();
     await compare();
   }));
 
+  function collapseBranch(id) {
+    const entry = result.entries[id];
+    if (!entry.children.length) return;
+    collapsed.add(id);
+    for (const child of entry.children) collapseBranch(child);
+  }
   function refreshRows() {
     if (!result) return;
     rows = [];
@@ -274,12 +360,12 @@ export function setupComparison(rpc, copyText) {
       copy.classList.add('copy-name');
       copy.tabIndex = entry.id === selected ? 0 : -1;
       copy.setAttribute('aria-label', `Copy ${entry.name}`);
-      identity.append(el('span', 'node-name', entry.name), copy);
-      row.append(identity, el('span', `change-badge ${entry.formattingOnly ? 'formatting' : entry.status}`, entry.reordered ? '↕ Order' : badge(entry)));
+      identity.append(el('span', 'node-name', entry.name));
+      row.append(identity, copy, el('span', `change-badge ${entry.formattingOnly ? 'formatting' : entry.status}`, entry.reordered ? '↕ Order' : badge(entry)));
       row.addEventListener('click', guard(async () => {
         selected = entry.id;
         tree.focus({ preventScroll: true });
-        if (entry.children.length) collapsed.has(entry.id) ? collapsed.delete(entry.id) : collapsed.add(entry.id);
+        if (entry.children.length) collapsed.has(entry.id) ? collapsed.delete(entry.id) : collapseBranch(entry.id);
         refreshRows(); await showDetail();
       }));
       fragment.append(row);
@@ -311,7 +397,7 @@ export function setupComparison(rpc, copyText) {
       if (collapsed.has(selected)) collapsed.delete(selected);
       else target = rows[index + 1]?.depth > rows[index].depth ? rows[index + 1].entry.id : undefined;
     } else if (event.key === 'ArrowLeft') {
-      if (current.children.length && !collapsed.has(selected)) collapsed.add(selected);
+      if (current.children.length && !collapsed.has(selected)) collapseBranch(selected);
       else target = current.parentId;
     } else return;
     event.preventDefault();
@@ -361,6 +447,7 @@ export function setupComparison(rpc, copyText) {
     const original = el('input'); original.type = 'checkbox'; original.checked = entry.formattingOnly;
     originalLabel.append(original, document.createTextNode('Show original XML (including formatting)'));
     const controls = el('div', 'field-controls'); controls.append(label, originalLabel);
+    if (!entry.includeIds) controls.append(el('span', 'source-meta', 'SoapUI IDs ignored'));
     const info = el('p', 'source-meta', 'Comparing XML…');
     const grid = el('div', 'diff-grid');
     const paging = el('div', 'page-tools');

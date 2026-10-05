@@ -48,13 +48,47 @@ test('reordering common steps is visible without any text change', () => {
 });
 
 test('unique names match regenerated IDs; ambiguous duplicates are not guessed', () => {
-  assert.equal(compare(project(step('A', 'x', 'old')), project(step('A', 'x', 'new'))).entries.at(-1).status, 'modified');
+  assert.equal(compare(project(step('A', 'x', 'old')), project(step('A', 'x', 'new'))).entries.at(-1).status, 'unchanged');
   const duplicate = compare(project(step('A') + step('A')), project(step('A') + step('A')));
   assert.equal(duplicate.counts.unchanged, 5);
   const ambiguous = compare(project(step('A', 'one') + step('A', 'two')), project(step('A', 'changed') + step('A', 'different')));
   assert.equal(ambiguous.counts.added, 2); assert.equal(ambiguous.counts.removed, 2);
   const ids = compare(project(step('A', 'one', '1') + step('A', 'two', '2')), project(step('A', 'two', '2') + step('A', 'one', '1')));
   assert.equal(ids.counts.added, 0); assert.equal(ids.counts.removed, 0);
+});
+
+test('SoapUI identity changes are ignored by default, including raw diffs and formatting mode, but can be included', () => {
+  const a = '<soapui-project id="p1" name="P"><testSuite id="s1" name="S"><testCase id="c1" name="C"><testStep id="t1" name="A" note="literal id=\'keep\' and &gt;"/></testCase></testSuite></soapui-project>';
+  const b = a.replaceAll('1"', "2'").replaceAll('id="', "id='");
+  const before = parse(a, 1), after = parse(b, 2);
+  for (const includeFormatting of [false, true]) {
+    const ignored = compareProjects(before, after, { includeFormatting });
+    assert.equal(ignored.counts.unchanged, 4);
+    for (const original of [false, true]) {
+      const diff = createXmlDiff(ignored.entries.at(-1), { original });
+      assert.equal(diff.rows.filter(row => row.status === 'changed').length, 0);
+      assert.ok(diff.rows.some(row => row.left?.text.includes("literal id='keep'")), 'ID-like strings inside another attribute are preserved');
+    }
+  }
+  const included = compareProjects(before, after, { includeIds: true });
+  assert.equal(included.counts.modified, 4);
+  assert.ok(createXmlDiff(included.entries.at(-1)).rows.some(row => row.status === 'changed' && row.right?.text.includes('id="t2"')));
+  assert.ok(createXmlDiff(included.entries.at(-1), { original: true }).rows.some(row => row.right?.text.includes("id='t2'")));
+  assert.equal(compareProjects(before, parse(a.replace(' id="t1"', ''))).counts.modified, 0, 'A removed generated ID is ignored too');
+  assert.equal(compareProjects(before, parse(a.replace(' id="t1"', '')), { includeIds: true }).counts.modified, 4);
+  const duplicates = project(step('Same', 'x', 'old-1') + step('Same', 'x', 'old-2'));
+  assert.equal(compare(duplicates, duplicates.replaceAll('old-', 'new-')).counts.unchanged, 5);
+});
+
+test('ignoring SoapUI IDs never hides payload IDs, property values, script content, or real step changes', () => {
+  const xml = project(step('A', 'assert id == 1', 'old').replace('<con:config>', '<con:config><payload xmlns="urn:payload" id="data-1"/><con:properties><con:property><con:name>id</con:name><con:value>property-1</con:value></con:property></con:properties>'));
+  for (const [from, to] of [['data-1', 'data-2'], ['property-1', 'property-2'], ['assert id == 1', 'assert id == 2'], ['type="groovy"', 'type="request"']]) {
+    const result = compare(xml, xml.replace('id="old"', 'id="new"').replace(from, to));
+    assert.equal(result.counts.modified, 4);
+    const rows = createXmlDiff(result.entries.at(-1)).rows;
+    assert.ok(rows.some(row => row.status === 'changed'));
+    assert.ok(rows.every(row => !row.left?.text.includes('id="old"') && !row.right?.text.includes('id="new"')));
+  }
 });
 
 test('keeps namespaces, mixed content, whitespace-only values, comments and processing instructions', () => {

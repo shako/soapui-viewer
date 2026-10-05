@@ -62,22 +62,39 @@
                 <div id="git-repository-controls" class="git-repository-controls" hidden>
                   <label for="git-repository">Git repository folder</label>
                   <div class="repository-entry"><input id="git-repository" type="text" placeholder="/path/to/repository" autocomplete="off" spellcheck="false"><button id="git-open-repository" class="button secondary">Open</button></div>
+                  <p id="git-repository-root" class="source-meta" hidden></p>
                   <p id="git-note" class="source-meta" hidden></p>
+                  <label id="git-show-merged-label" class="check" hidden><input id="git-show-merged" type="checkbox">Show merged branches</label>
                 </div>
                 <div id="drop-before" class="compare-source">
-                  <strong>Before</strong><button id="choose-before" class="button secondary">Choose XML</button>
+                  <strong id="compare-before-title">Before</strong><button id="choose-before" class="button secondary">Choose local XML</button>
                   <input id="input-before" type="file" accept=".xml,text/xml,application/xml" hidden>
-                  <label class="git-source" hidden>Version <select id="git-before" aria-label="Before version"><option value="file">XML file</option></select></label>
-                  <label id="git-path-label-before" class="git-source" hidden>Project file <input id="git-path-before" type="text" list="git-files-before" aria-label="Before project file" placeholder="Choose or type an XML path" autocomplete="off" spellcheck="false"></label>
-                  <datalist id="git-files-before"></datalist>
+                  <div id="git-version-before" class="git-source" hidden>
+                    <label id="git-version-label-before" for="git-query-before">Version</label>
+                    <div class="git-picker">
+                      <input id="git-before" type="hidden" value="file">
+                      <div class="git-picker-field"><input id="git-query-before" type="text" role="combobox" aria-label="Before version" aria-autocomplete="list" aria-expanded="false" aria-controls="git-options-before" aria-describedby="git-matches-before" placeholder="Search branches and tags…" autocomplete="off" spellcheck="false"><button id="git-toggle-before" type="button" aria-label="Choose before version" tabindex="-1">▾</button></div>
+                      <div id="git-options-before" class="git-version-options" role="listbox" aria-label="Before versions" hidden></div>
+                    </div>
+                  </div>
+                  <span id="git-matches-before" role="status" aria-live="polite" hidden></span>
+                  <label id="git-path-label-before" class="git-source" hidden>Project file <input id="git-path-before" type="text" aria-label="Before project file" placeholder="Path within the repository" autocomplete="off" spellcheck="false"></label>
                   <span id="compare-before-name">Drop one XML file here or choose a file</span>
+                  <button id="git-use-working-path" class="button quiet" hidden>Use the working file path again</button>
                 </div>
                 <div id="drop-after" class="compare-source">
-                  <strong>After</strong><button id="choose-after" class="button secondary">Choose XML</button>
+                  <strong id="compare-after-title">After</strong><button id="choose-after" class="button secondary">Choose local XML</button>
                   <input id="input-after" type="file" accept=".xml,text/xml,application/xml" hidden>
-                  <label class="git-source" hidden>Version <select id="git-after" aria-label="After version"><option value="file">XML file</option></select></label>
-                  <label id="git-path-label-after" class="git-source" hidden>Project file <input id="git-path-after" type="text" list="git-files-after" aria-label="After project file" placeholder="Choose or type an XML path" autocomplete="off" spellcheck="false"></label>
-                  <datalist id="git-files-after"></datalist>
+                  <div id="git-version-after" class="git-source" hidden>
+                    <label for="git-query-after">Version</label>
+                    <div class="git-picker">
+                      <input id="git-after" type="hidden" value="file">
+                      <div class="git-picker-field"><input id="git-query-after" type="text" role="combobox" aria-label="After version" aria-autocomplete="list" aria-expanded="false" aria-controls="git-options-after" aria-describedby="git-matches-after" placeholder="Search branches and tags…" autocomplete="off" spellcheck="false"><button id="git-toggle-after" type="button" aria-label="Choose after version" tabindex="-1">▾</button></div>
+                      <div id="git-options-after" class="git-version-options" role="listbox" aria-label="After versions" hidden></div>
+                    </div>
+                  </div>
+                  <span id="git-matches-after" role="status" aria-live="polite" hidden></span>
+                  <label id="git-path-label-after" class="git-source" hidden>Project file <input id="git-path-after" type="text" aria-label="After project file" placeholder="Path within the repository" autocomplete="off" spellcheck="false"></label>
                   <span id="compare-after-name">Drop one XML file here or choose a file</span>
                 </div>
                 <label id="git-same-path-label" class="check" hidden><input id="git-same-path" type="checkbox" checked>Use the same file path on both sides</label>
@@ -85,7 +102,7 @@
                 <details id="compare-git-help" class="compare-git-help"><summary>Compare Git branches</summary><p>Start the local Git helper from this application's repository folder with <code>npm run compare:git</code>, then enter your Git folder in the viewer. Choose a version and project file on each side. Requires Node.js 22+ and Git.</p></details>
               </div>
             </details>
-            <div class="compare-tools"><label class="check"><input id="compare-only-changes" type="checkbox" checked>Only changes</label><label class="check"><input id="compare-formatting" type="checkbox">Include formatting changes</label><p id="compare-summary" role="status" aria-live="polite"></p></div>
+            <div class="compare-tools"><label class="check"><input id="compare-only-changes" type="checkbox" checked>Only changes</label><label class="check"><input id="compare-formatting" type="checkbox">Include formatting changes</label><label class="check" title="Include project, suite, case and step ID attributes. IDs in requests and properties always count."><input id="compare-ids" type="checkbox">Include ID changes</label><p id="compare-summary" role="status" aria-live="polite"></p></div>
             <div id="compare-progress" class="import-status" hidden><span id="compare-progress-label"></span><progress id="compare-progress-bar" max="1" value="0"></progress></div>
             <p id="compare-error" class="errors" role="alert" hidden></p>
           </div>
@@ -99,6 +116,16 @@
       </section>
     </section>
   </main>
+  <dialog id="git-file-dialog" class="recents-dialog git-file-dialog" aria-labelledby="git-file-title" aria-describedby="git-file-version git-file-note">
+    <div class="recents-heading"><h2 id="git-file-title">Choose a project file</h2><button id="git-file-close" class="button secondary">Cancel</button></div>
+    <p id="git-file-version"></p>
+    <p id="git-file-note"></p>
+    <p id="git-file-linked"></p>
+    <label for="git-file-search">Search XML files in this version</label>
+    <input id="git-file-search" type="search" placeholder="Type a filename or folder…" autocomplete="off" spellcheck="false" aria-controls="git-file-list">
+    <p id="git-file-count" role="status" aria-live="polite"></p>
+    <div id="git-file-list" class="git-file-list"></div>
+  </dialog>
   <dialog id="recents-dialog" class="recents-dialog" aria-labelledby="recents-title" aria-describedby="recents-note">
     <div class="recents-heading"><h2 id="recents-title">Recent projects</h2><button id="close-recents" class="button secondary">Close</button></div>
     <p id="recents-note">The last 10 projects saved in this browser. Original files are read again when reopened; local copies contain the version saved on the date shown.</p>

@@ -317,7 +317,13 @@ function hasExpandedBranches() {
 function isOpen(id) { return state.query ? !state.collapsed.has(id) : state.expanded.has(id); }
 function toggle(id) {
   const collection = state.query ? state.collapsed : state.expanded;
-  if (collection.has(id)) collection.delete(id);
+  if (isOpen(id)) {
+    const collapse = nodeId => {
+      state.expanded.delete(nodeId); state.collapsed.add(nodeId);
+      for (const child of state.nodes.get(nodeId).children) collapse(child);
+    };
+    collapse(id);
+  } else if (collection.has(id)) collection.delete(id);
   else collection.add(id);
   refreshRows();
   renderTree();

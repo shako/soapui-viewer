@@ -35,11 +35,22 @@ export async function openGitRepository(inputPath) {
     input = resolve(await realpath(dirname(requested)), basename(requested));
   }
   const repository = await realpath(await git(directory ? input : dirname(input), ['rev-parse', '--show-toplevel']));
+  const folder = directory ? requested : dirname(requested);
+  const folderPrefix = relative(repository, directory ? input : dirname(input)).split(sep).join('/');
   const path = directory ? '' : validatePath(relative(repository, input).split(sep).join('/'));
   const branch = await git(repository, ['branch', '--show-current']);
-  const names = (await git(repository, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes', 'refs/tags'])).split('\n').filter(Boolean);
-  const refs = [{ value: 'HEAD', label: 'HEAD (current commit)' }, { value: 'WORKTREE', label: 'Working copy (saved file)' },
-    ...names.filter(ref => !ref.endsWith('/HEAD')).map(ref => ({ value: ref, label: ref.replace(/^refs\/heads\//, 'Branch: ').replace(/^refs\/remotes\//, 'Remote: ').replace(/^refs\/tags\//, 'Tag: ') }))];
+  const listing = await git(repository, ['for-each-ref', '--format=%(refname)%00%(committerdate:iso-strict)%00%(*committerdate:iso-strict)', 'refs/heads', 'refs/remotes', 'refs/tags']);
+  const versions = listing.split('\n').filter(Boolean).map(line => {
+    const [value, directDate, taggedDate] = line.split('\0');
+    return { value, label: value.replace(/^refs\/heads\//, 'Branch: ').replace(/^refs\/remotes\//, 'Remote: ').replace(/^refs\/tags\//, 'Tag: '), committedAt: directDate || taggedDate || null };
+  }).filter(ref => !ref.value.endsWith('/HEAD'));
+  versions.sort((a, b) => (Date.parse(b.committedAt) || 0) - (Date.parse(a.committedAt) || 0) || a.value.localeCompare(b.value));
+  const baseRef = ['refs/heads/main', 'refs/heads/master', 'refs/remotes/origin/main', 'refs/remotes/origin/master'].find(value => versions.some(ref => ref.value === value)) || '';
+  if (baseRef) {
+    const merged = new Set((await git(repository, ['for-each-ref', `--merged=${baseRef}`, '--format=%(refname)', 'refs/heads', 'refs/remotes'])).split('\n'));
+    for (const ref of versions) ref.merged = merged.has(ref.value);
+  }
+  const refs = [{ value: 'HEAD', label: 'HEAD (current commit)' }, { value: 'WORKTREE', label: `Working copy: ${branch || 'Detached HEAD'}` }, ...versions];
   const allowed = new Set(refs.map(ref => ref.value));
   const validateRef = ref => { if (!allowed.has(ref)) throw new Error('Choose a version from the list.'); };
   const commit = ref => git(repository, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);
@@ -51,7 +62,7 @@ export async function openGitRepository(inputPath) {
     } catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error; }
   }
   return {
-    context: { repository, path, branch, fileName: path ? basename(path) : '', refs },
+    context: { repository, folder, folderPrefix, path, branch, baseRef, fileName: path ? basename(path) : '', refs },
     async listFiles(ref) {
       validateRef(ref);
       if (ref === 'WORKTREE') {

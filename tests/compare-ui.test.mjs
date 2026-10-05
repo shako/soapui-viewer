@@ -10,13 +10,20 @@ async function setup(t, git) {
   const html = await readFile(new URL('../src/index.html', import.meta.url), 'utf8');
   const { document, window } = parseHTML(html);
   const saved = new Map();
-  const globals = { document, ResizeObserver: class { observe() {} }, localStorage: { getItem: () => null }, SOAPUI_GIT: git };
+  const globals = { document, Event: window.Event, ResizeObserver: class { observe() {} }, localStorage: { getItem: () => null }, SOAPUI_GIT: git };
   for (const [key, value] of Object.entries(globals)) {
     saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
   t.after(() => { for (const [key, descriptor] of saved) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
   // LinkeDOM omits live form values and layout. Supply those browser semantics.
+  window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 20, top: 100, bottom: 130, width: 300 });
+  window.HTMLInputElement.prototype.select = () => {};
+  for (const dialog of document.querySelectorAll('dialog')) {
+    dialog.showModal = () => dialog.setAttribute('open', '');
+    dialog.close = () => dialog.removeAttribute('open');
+  }
+  Object.defineProperty(document.documentElement, 'clientHeight', { value: 720 });
   for (const select of document.querySelectorAll('select')) {
     let value = select.querySelector('option').value;
     Object.defineProperty(select, 'value', { get: () => value, set: next => { value = next; } });
@@ -58,7 +65,8 @@ test('Compare UI demo, hierarchy filter, XML diff, copy, keyboard, swap and clea
   assert.match(ui.$('compare-detail').textContent, /log.warn/);
   assert.ok(ui.document.querySelectorAll('.diff-cell.added').length > 0);
   assert.ok(ui.document.querySelectorAll('.diff-cell.removed').length > 0);
-  const selected = ui.document.querySelector('[aria-selected=true]');
+  const selected = ui.document.querySelector('[role=treeitem][aria-selected=true]');
+  assert.ok(selected.querySelector('.copy-name').nextElementSibling.classList.contains('change-badge'));
   await ui.click(selected.querySelector('.copy-name'));
   assert.equal(ui.copied(), 'Check certificate revocation');
   assert.match(ui.$('compare-detail').textContent, /Check revocation → Check certificate revocation/);
@@ -78,6 +86,39 @@ test('Compare UI demo, hierarchy filter, XML diff, copy, keyboard, swap and clea
   assert.equal(ui.result(), null); assert.equal(ui.$('compare-tree-rows').children.length, 0);
 });
 
+test('ID changes are opt-in and closing a suite recursively closes its cases with mouse or keyboard', async t => {
+  const ui = await setup(t);
+  const xml = '<soapui-project name="P" id="p1"><testSuite name="S" id="s1"><testCase name="C1" id="c1"><testStep name="A" id="a1"/></testCase><testCase name="C2"><testStep name="B"/></testCase></testSuite></soapui-project>';
+  ui.comparison.drop([new File([xml], 'before.xml'), new File([xml.replace(/id="([^"]+)1"/g, (_, prefix) => `id="${prefix}2"`)], 'after.xml')]);
+  await ui.click('compare-run');
+  assert.equal(ui.$('compare-ids').checked, false);
+  assert.match(ui.$('compare-summary').textContent, /0 changed/);
+  await ui.check(ui.$('compare-ids'), true);
+  assert.match(ui.$('compare-summary').textContent, /4 changed/);
+  await ui.click(ui.document.querySelector('[role=treeitem][aria-label^="Step A,"]'));
+  assert.ok(ui.$('compare-detail').textContent.includes('id="a2"'));
+  await ui.check(ui.$('compare-ids'), false);
+  assert.match(ui.$('compare-summary').textContent, /0 changed/);
+  assert.equal(ui.$('compare-detail').querySelectorAll('.diff-cell.added').length, 0);
+  await ui.check(ui.$('compare-only-changes'), false);
+  const suite = () => ui.document.querySelector('[role=treeitem][aria-label^="Suite S,"]');
+  const cases = () => [...ui.document.querySelectorAll('[role=treeitem][aria-label^="Case "]')];
+  await ui.click(suite()); await ui.click(suite());
+  assert.equal(cases().length, 2);
+  assert.ok(cases().every(row => row.getAttribute('aria-expanded') === 'false'));
+  assert.equal(ui.document.querySelectorAll('[role=treeitem][aria-label^="Step "]').length, 0);
+  await ui.click(cases()[0]);
+  assert.equal(ui.document.querySelectorAll('[role=treeitem][aria-label^="Step "]').length, 1);
+  const key = async name => {
+    const event = new ui.window.Event('keydown', { bubbles: true, cancelable: true }); event.key = name;
+    ui.$('compare-tree').dispatchEvent(event); await ui.settle();
+  };
+  await key('ArrowUp'); // Select the suite without closing it.
+  await key('ArrowLeft'); await key('ArrowRight');
+  assert.ok(cases().every(row => row.getAttribute('aria-expanded') === 'false'));
+  assert.equal(ui.document.querySelectorAll('[role=treeitem][aria-label^="Step "]').length, 0);
+});
+
 test('Compare UI drops files, reports invalid input and does not render XML as HTML', async t => {
   const ui = await setup(t);
   await ui.click('compare-run');
@@ -95,7 +136,7 @@ test('Compare UI drops files, reports invalid input and does not render XML as H
   assert.equal(ui.$('compare-run').disabled, false);
 });
 
-test('Git mode exposes file and revision choices, and compares missing files as removals', async t => {
+test('Git mode stops when the working file is missing instead of displaying every item as removed', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   const calls = [];
@@ -108,16 +149,138 @@ test('Git mode exposes file and revision choices, and compares missing files as 
   const ui = await setup(t, { base: '/session/', repository: 'synthetic', path: 'project.xml', branch: 'main', refs: [{ value: 'HEAD', label: 'HEAD' }, { value: 'WORKTREE', label: 'Working copy' }] });
   assert.equal(ui.$('git-path-before').value, 'project.xml');
   assert.equal(ui.$('git-path-after').value, 'project.xml');
-  assert.match(ui.$('compare-after-name').textContent, /Not listed/);
+  assert.match(ui.$('compare-after-name').textContent, /File not found in the working-copy list/);
   await ui.click('compare-run');
   assert.equal(ui.$('git-note').hidden, false);
   assert.deepEqual(calls.map(url => url.searchParams.get('ref')), ['HEAD', 'WORKTREE']);
   assert.ok(calls.every(url => url.searchParams.get('path') === 'project.xml' && url.searchParams.get('repository') === 'synthetic'));
-  assert.match(ui.$('compare-summary').textContent, /0 added · 1 removed/);
+  assert.equal(ui.result(), undefined, 'Missing inputs must not reach the comparison worker');
+  assert.match(ui.$('compare-error').textContent, /Cannot compare.*project.xml.*Working copy.*synthetic/);
+  assert.equal(ui.$('compare-error').hidden, false);
+  assert.equal(ui.$('compare-tree-rows').children.length, 0);
+  assert.ok(ui.$('compare-settings').hasAttribute('open'));
+  assert.equal(ui.$('compare-run').disabled, false);
   assert.match(ui.$('compare-before-name').textContent, /1234567890ab/);
-  assert.match(ui.$('compare-after-name').textContent, /file not present/);
+  assert.match(ui.$('compare-after-name').textContent, /file not found/);
 });
 
+test('a missing comparison file stops before reading the working XML and choosing a different file recovers', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  let missing = true;
+  globalThis.fetch = async url => {
+    const request = new URL(url, 'http://localhost');
+    if (request.pathname.endsWith('/files')) return Response.json({ paths: ['project.xml', 'history/project.xml'] });
+    const ref = request.searchParams.get('ref'), path = request.searchParams.get('path');
+    calls.push([ref, path]);
+    return ref === 'HEAD' && path === 'project.xml' && missing
+      ? new Response(null, { status: 204 }) : new Response('<soapui-project name="Example"/>');
+  };
+  const ui = await setup(t, { base: '/session/', repository: '/synthetic/repository', path: 'project.xml', branch: 'main', refs: [
+    { value: 'HEAD', label: 'HEAD (current commit)' }, { value: 'WORKTREE', label: 'Working copy: main' },
+  ] });
+  await ui.click('compare-run');
+  assert.deepEqual(calls, [['HEAD', 'project.xml']], 'Do not load a large working file when its comparison version is absent');
+  assert.equal(ui.result(), undefined);
+  assert.match(ui.$('compare-error').textContent, /Cannot compare.*HEAD.*\/synthetic\/repository/);
+  assert.equal(ui.$('compare-tree-rows').children.length, 0);
+  await ui.click('choose-before');
+  await ui.click([...ui.$('git-file-list').children].find(row => row.title === 'history/project.xml'));
+  await ui.click('compare-run');
+  assert.equal(ui.$('compare-error').hidden, true);
+  assert.equal(ui.$('git-path-after').value, 'project.xml');
+  assert.match(ui.$('compare-summary').textContent, /0 added · 0 removed · 0 changed/);
+  await ui.click('git-use-working-path');
+  await ui.click('compare-run');
+  assert.equal(ui.$('compare-error').hidden, false);
+  assert.equal(ui.$('compare-tree-rows').children.length, 0, 'An unsuccessful comparison clears previous results');
+  assert.doesNotMatch(ui.$('compare-summary').textContent, /added|removed|changed/);
+  missing = false;
+  await ui.click('compare-run');
+  assert.equal(ui.$('compare-error').hidden, true, 'A file that becomes available can be compared without reopening the repository');
+});
+
+test('inline branch picker searches, preserves selection, hides merged branches, and supports keyboard and swap', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests = [];
+  globalThis.fetch = async url => { requests.push(url); return Response.json({ paths: ['project.xml'] }); };
+  const committedAt = '2026-10-05T08:33:00Z';
+  const refs = [
+    { value: 'HEAD', label: 'HEAD (current commit)' }, { value: 'WORKTREE', label: 'Working copy (saved file)' },
+    { value: 'refs/heads/feature/CRL', label: 'Branch: feature/CRL', committedAt, merged: true },
+    { value: 'refs/remotes/origin/CRL', label: 'Remote: origin/CRL', committedAt, merged: false },
+    { value: 'refs/tags/release-CRL', label: 'Tag: release-CRL', committedAt },
+    { value: 'refs/heads/main', label: 'Branch: main', committedAt: '2025-01-01T00:00:00Z', merged: true },
+    { value: 'refs/heads/old-branch', label: 'Branch: old-branch', committedAt: '2024-01-01T00:00:00Z', merged: true },
+  ];
+  const ui = await setup(t, { base: '/session/', repository: '/synthetic', branch: 'feature/CRL', baseRef: 'refs/heads/main', refs });
+  const options = side => [...ui.$('git-options-' + side).querySelectorAll('[role=option]')];
+  const names = side => options(side).map(row => row.firstChild.textContent);
+  const filter = (side, query) => {
+    ui.$('git-query-' + side).value = query;
+    ui.$('git-query-' + side).dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+  };
+  const key = async (side, key) => {
+    const event = new ui.window.Event('keydown', { bubbles: true, cancelable: true }); event.key = key;
+    ui.$('git-query-' + side).dispatchEvent(event); await ui.settle(); return event;
+  };
+  assert.equal(ui.$('git-query-before').getAttribute('role'), 'combobox');
+  assert.equal(ui.$('git-filter-before'), null, 'Search is inside the version picker');
+  assert.equal(ui.$('git-show-merged').checked, false);
+  assert.ok(!names('before').includes('Branch: old-branch'));
+  assert.ok(names('before').includes('Branch: main'));
+  assert.ok(names('before').includes('Branch: feature/CRL'), 'Current branch stays visible even when merged');
+  const date = new Date(committedAt);
+  const expectedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  assert.equal(options('before').find(row => row.firstChild.textContent === 'Branch: feature/CRL').querySelector('small').textContent, `${expectedDate} · latest commit · merged`);
+  assert.match(ui.$('git-matches-before').textContent, /1 merged hidden/);
+  assert.ok(!names('before').includes('XML file'));
+  assert.ok(!names('before').some(name => name.startsWith('Working copy')));
+  ui.$('git-path-before').value = 'project.xml';
+  ui.$('git-path-before').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+  const source = ui.$('compare-source-summary').textContent;
+  filter('before', ' cRl ');
+  assert.equal(ui.$('git-before').value, 'refs/heads/main');
+  assert.deepEqual(names('before'), ['Branch: feature/CRL', 'Remote: origin/CRL', 'Tag: release-CRL']);
+  assert.match(ui.$('git-matches-before').textContent, /3 matching.*Selected version unchanged/);
+  assert.equal(ui.$('compare-source-summary').textContent, source);
+  assert.equal(ui.$('git-query-before').getAttribute('aria-expanded'), 'true');
+  filter('before', 'no-such-branch');
+  assert.deepEqual(names('before'), []);
+  assert.match(ui.$('git-options-before').textContent, /No matching versions/);
+  await key('before', 'Enter');
+  assert.equal(ui.$('git-before').value, 'refs/heads/main');
+  await key('before', 'Escape');
+  assert.equal(ui.$('git-query-before').value, 'Branch: main');
+  assert.equal(ui.$('git-options-before').hidden, true);
+  assert.doesNotMatch(ui.$('git-matches-before').textContent, /matching|Selected version unchanged/);
+  assert.equal(requests.length, 2, 'Typing filters does not fetch files or change versions');
+  filter('before', 'CRL');
+  await key('before', 'ArrowDown'); await key('before', 'Enter');
+  assert.equal(ui.$('git-before').value, 'refs/remotes/origin/CRL');
+  assert.equal(ui.$('git-query-before').value, 'Remote: origin/CRL');
+  assert.match(requests.at(-1), /ref=refs%2Fremotes%2Forigin%2FCRL/);
+  assert.equal(ui.$('git-path-before').value, 'project.xml');
+  await ui.check(ui.$('git-show-merged'), true);
+  filter('after', 'old-branch');
+  await ui.click(options('after')[0]);
+  assert.equal(ui.$('git-after').value, 'refs/heads/old-branch');
+  await ui.check(ui.$('git-show-merged'), false);
+  assert.ok(names('after').includes('Branch: old-branch'), 'Explicitly selected merged version remains usable');
+  await ui.click('compare-swap');
+  assert.equal(ui.$('git-before').value, 'refs/heads/old-branch');
+  assert.equal(ui.$('git-query-before').value, 'Branch: old-branch');
+  assert.equal(ui.$('git-after').value, 'refs/remotes/origin/CRL');
+  filter('before', 'tag:'); await key('before', 'Tab');
+  assert.equal(ui.$('git-query-before').value, 'Branch: old-branch');
+  assert.equal(ui.$('git-options-before').hidden, true);
+  await ui.click('compare-clear');
+  assert.equal(ui.$('git-before').value, 'refs/heads/main');
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
+  assert.equal(ui.$('git-path-after').value, '');
+});
 
 test('formatting filter is off by default and exposes original XML without rereading files', async t => {
   const ui = await setup(t);
@@ -133,7 +296,8 @@ test('formatting filter is off by default and exposes original XML without rerea
   assert.equal(ui.$('compare-tree-rows').children.length, 2);
   await ui.click(ui.document.querySelector('[role=treeitem][aria-label^="Suite"]'));
   assert.match(ui.$('compare-detail').textContent, /≈ Formatting/);
-  assert.match(ui.$('compare-detail').textContent, /id='s'/);
+  assert.match(ui.$('compare-detail').textContent, /name='S'/);
+  assert.match(ui.$('compare-detail').textContent, /SoapUI IDs ignored/);
   assert.match(ui.$('compare-detail').textContent, /Whitespace markers/);
   const original = ui.document.querySelectorAll('#compare-detail input')[1];
   assert.equal(original.checked, true);
@@ -187,11 +351,16 @@ test('enter a Git folder, choose separate paths per branch, swap and return to l
   await ui.click('git-open-repository');
   assert.equal(ui.$('compare-error').hidden, true, ui.$('compare-error').textContent);
   assert.equal(ui.$('git-before').value, 'refs/heads/main');
-  assert.equal(ui.$('git-after').value, 'refs/heads/feature');
-  assert.equal(ui.$('git-path-before').value, 'old/project.xml');
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
+  assert.equal(ui.$('git-path-before').value, '', 'Opening a repository must not select an arbitrary XML or POM file');
+  assert.match(ui.$('compare-before-name').textContent, /same file you choose above/);
+  assert.equal(ui.$('choose-before').textContent, 'Choose a different file');
+  assert.equal(ui.$('choose-after').textContent, 'Choose working file');
+  assert.equal(ui.$('git-path-before').hasAttribute('list'), false);
+  ui.$('git-path-before').value = 'old/project.xml';
+  ui.$('git-path-before').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
   assert.equal(ui.$('git-path-after').value, 'old/project.xml');
-  assert.equal(ui.$('git-path-after').disabled, true);
-  assert.match(ui.$('compare-after-name').textContent, /Not listed/);
+  assert.equal(ui.$('git-path-after').disabled, false);
   await ui.check(ui.$('git-same-path'), false);
   assert.equal(ui.$('git-path-after').disabled, false);
   ui.$('git-path-after').value = 'renamed/project.xml';
@@ -199,9 +368,9 @@ test('enter a Git folder, choose separate paths per branch, swap and return to l
   await ui.click('compare-run');
   assert.equal(ui.$('compare-error').hidden, true, ui.$('compare-error').textContent);
   assert.deepEqual(requests.map(url => [url.searchParams.get('ref'), url.searchParams.get('path')]), [
-    ['refs/heads/main', 'old/project.xml'], ['refs/heads/feature', 'renamed/project.xml'],
+    ['refs/heads/main', 'old/project.xml'], ['WORKTREE', 'renamed/project.xml'],
   ]);
-  assert.match(ui.$('compare-source-summary').textContent, /old\/project.xml → Branch: feature · renamed\/project.xml/);
+  assert.match(ui.$('compare-source-summary').textContent, /old\/project.xml → Working copy · renamed\/project.xml/);
   await ui.click('compare-swap');
   assert.equal(ui.$('git-path-before').value, 'renamed/project.xml');
   assert.equal(ui.$('git-after').value, 'refs/heads/main');
@@ -212,4 +381,121 @@ test('enter a Git folder, choose separate paths per branch, swap and return to l
   await ui.settle();
   assert.equal(ui.$('git-path-before').value, 'renamed/project.xml', 'Branch switching must not silently change the selected path');
   assert.match(ui.$('compare-before-name').textContent, /Not listed/);
+});
+
+test('Git file chooser starts from the working copy, searches full paths, links paths, and reads another branch without a disk picker', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const workingPath = 'SoapUI/long folder with spaces/integration/certificates/AS4-project.xml';
+  const oldPath = 'Legacy/integration/old-AS4-project.xml';
+  const candidates = [...Array.from({ length: 250 }, (_, i) => `module-${i}/pom.xml`), workingPath];
+  const requests = [];
+  globalThis.fetch = async url => {
+    const request = new URL(url, 'http://localhost');
+    const working = request.searchParams.get('ref') === 'WORKTREE';
+    if (request.pathname.endsWith('/files')) return Response.json({ paths: working ? candidates : [oldPath] });
+    requests.push([request.searchParams.get('ref'), request.searchParams.get('path')]);
+    return new Response(`<soapui-project name="${working ? 'Saved working changes' : 'Old commit'}"/>`);
+  };
+  const ui = await setup(t, { base: '/session/', repository: '/synthetic', branch: 'feature', refs: [
+    { value: 'HEAD', label: 'HEAD' }, { value: 'WORKTREE', label: 'Working copy: feature' },
+    { value: 'refs/heads/main', label: 'Branch: main' }, { value: 'refs/heads/feature', label: 'Branch: feature' },
+  ] });
+  let diskPickers = 0;
+  for (const side of ['before', 'after']) ui.$('input-' + side).addEventListener('click', () => diskPickers++);
+  const search = query => {
+    ui.$('git-file-search').value = query;
+    ui.$('git-file-search').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+  };
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
+  await ui.click('choose-after');
+  assert.ok(ui.$('git-file-dialog').hasAttribute('open'));
+  assert.match(ui.$('git-file-version').textContent, /After · Working copy: feature/);
+  assert.match(ui.$('git-file-note').textContent, /uncommitted/);
+  assert.match(ui.$('git-file-linked').textContent, /same file path/);
+  assert.equal(ui.$('git-file-list').children.length, 200);
+  assert.match(ui.$('git-file-count').textContent, /251 XML files.*first 200/);
+  search('missing-project');
+  assert.equal(ui.$('git-file-list').children.length, 0);
+  assert.match(ui.$('git-file-count').textContent, /No XML files/);
+  search('as4');
+  assert.equal(ui.$('git-file-list').children.length, 1, 'Filtering reaches files beyond the first 200');
+  const choice = ui.$('git-file-list').querySelector('button');
+  assert.equal(choice.querySelector('strong').textContent, 'AS4-project.xml');
+  assert.equal(choice.querySelector('span').textContent, workingPath, 'The full path stays readable');
+  await ui.click(choice);
+  assert.equal(ui.$('git-file-dialog').hasAttribute('open'), false);
+  assert.equal(ui.$('git-path-before').value, workingPath);
+  assert.equal(ui.$('git-path-after').value, workingPath);
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
+  await ui.click('choose-before');
+  assert.match(ui.$('git-file-version').textContent, /Before · Branch: main/);
+  assert.match(ui.$('git-file-note').textContent, /No checkout required/);
+  assert.equal(ui.$('git-file-list').querySelector('span').textContent, oldPath);
+  await ui.click('git-file-close');
+  assert.equal(ui.$('git-path-before').value, workingPath, 'Cancel preserves the selected path');
+  await ui.check(ui.$('git-same-path'), false);
+  await ui.click('choose-before');
+  assert.match(ui.$('git-file-linked').textContent, /working file stays unchanged/);
+  await ui.click(ui.$('git-file-list').querySelector('button'));
+  assert.equal(ui.$('git-path-before').value, oldPath);
+  assert.equal(ui.$('git-path-after').value, workingPath);
+  await ui.click('compare-run');
+  assert.equal(ui.$('compare-error').hidden, true, ui.$('compare-error').textContent);
+  assert.deepEqual(requests, [['refs/heads/main', oldPath], ['WORKTREE', workingPath]]);
+  assert.equal(diskPickers, 0, 'Git and working-copy buttons never open the filesystem picker');
+  ui.$('git-before').value = 'file';
+  ui.$('git-before').dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  await ui.settle();
+  assert.equal(ui.$('choose-before').textContent, 'Choose local XML');
+  await ui.click('choose-before');
+  assert.equal(diskPickers, 1, 'A standalone file remains an explicit alternate source');
+});
+
+test('simple Git flow preserves the chosen subfolder, fixes the working version, and permits a different comparison file', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const workingPath = 'soapui_development/current.xml', alternatePath = 'archive/old.xml';
+  const reads = [];
+  globalThis.fetch = async url => {
+    const request = new URL(url, 'http://localhost');
+    if (request.pathname.endsWith('/files')) return Response.json({ paths: request.searchParams.get('ref') === 'WORKTREE' ? [workingPath, 'sibling/other.xml'] : [alternatePath] });
+    reads.push([request.searchParams.get('ref'), request.searchParams.get('path')]);
+    return new Response('<soapui-project name="Example"/>');
+  };
+  const ui = await setup(t, { base: '/session/', repository: '/synthetic/local', folder: '/synthetic/local/soapui_development', folderPrefix: 'soapui_development', branch: 'main', baseRef: 'refs/heads/main', refs: [
+    { value: 'HEAD', label: 'HEAD (current commit)' }, { value: 'WORKTREE', label: 'Working copy: main' },
+    { value: 'refs/heads/main', label: 'Branch: main', merged: true },
+  ] });
+  assert.equal(ui.$('git-repository').value, '/synthetic/local/soapui_development');
+  assert.equal(ui.$('git-repository-root').hidden, false);
+  assert.match(ui.$('git-repository-root').textContent, /repository: \/synthetic\/local$/);
+  assert.match(ui.$('git-note').textContent, /only one branch/);
+  assert.equal(ui.$('git-show-merged-label').hidden, true, 'No misleading merged-branch filter when only main exists');
+  assert.equal(ui.$('drop-after').nextElementSibling, ui.$('drop-before'), 'Working file is the first step');
+  assert.equal(ui.$('git-version-after').hidden, true, 'Only the comparison branch needs a version selector');
+  assert.equal(ui.$('git-same-path-label').hidden, true, 'Same-path linking is automatic');
+  assert.equal(ui.$('git-path-label-before').hidden, true);
+  await ui.click('choose-after');
+  assert.equal(ui.$('git-file-search').value, 'soapui_development/');
+  assert.equal(ui.$('git-file-list').children.length, 1, 'Initially browse inside the folder the user supplied');
+  await ui.click(ui.$('git-file-list').firstChild);
+  assert.equal(ui.$('git-path-after').value, workingPath);
+  assert.equal(ui.$('git-path-before').value, workingPath);
+  assert.match(ui.$('compare-before-name').textContent, /File not found on this branch/);
+  await ui.click('choose-before'); await ui.click('git-file-close');
+  assert.equal(ui.$('git-same-path').checked, true, 'Cancel does not unlink the default path');
+  await ui.click('choose-before');
+  ui.$('git-file-search').value = 'archive';
+  ui.$('git-file-search').dispatchEvent(new ui.window.Event('input'));
+  await ui.click(ui.$('git-file-list').firstChild);
+  assert.equal(ui.$('git-path-after').value, workingPath);
+  assert.equal(ui.$('git-path-before').value, alternatePath);
+  assert.equal(ui.$('git-same-path').checked, false);
+  assert.equal(ui.$('git-use-working-path').hidden, false);
+  await ui.click('compare-run');
+  assert.deepEqual(reads, [['HEAD', alternatePath], ['WORKTREE', workingPath]]);
+  await ui.click('git-use-working-path');
+  assert.equal(ui.$('git-path-before').value, workingPath);
+  assert.equal(ui.$('git-path-label-before').hidden, true);
 });

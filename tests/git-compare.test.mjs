@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm, symlink, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, symlink, mkdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -40,6 +40,52 @@ test('Git helper reads branches, tags, HEAD and working copy without modifying t
   for (const ref of ['--help', 'HEAD:../../etc/passwd', 'main;touch nope', '../file', '']) await assert.rejects(project.snapshot(ref), /Choose a version/);
   assert.equal((await git('status', '--porcelain=v1')).stdout, before);
   assert.equal((await git('branch', '--show-current')).stdout.trim(), 'main');
+});
+
+test('branch and tag choices use the latest commit date, newest first across time zones', async t => {
+  const { dir, git } = await fixture(t);
+  const commit = async (date, message) => exec('git', ['-C', dir, 'commit', '--allow-empty', '-m', message], {
+    env: { ...process.env, GIT_COMMITTER_DATE: date, GIT_AUTHOR_DATE: '2020-01-01T00:00:00Z' },
+  });
+  await commit('2024-01-02T09:00:00+01:00', 'Older');
+  await git('branch', 'zzz-older');
+  await git('tag', '-a', 'annotated-old', '-m', 'New tag, old commit');
+  await commit('2024-01-02T08:30:00Z', 'Newer');
+  await git('branch', 'aaa-newer');
+  await git('tag', 'lightweight-new');
+  await git('update-ref', 'refs/remotes/origin/newer', 'HEAD');
+  await git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/newer');
+  const refs = (await openGitRepository(dir)).context.refs;
+  assert.deepEqual(refs.slice(0, 2).map(ref => ref.value), ['HEAD', 'WORKTREE']);
+  const stamp = value => Date.parse(refs.find(ref => ref.value === value).committedAt);
+  assert.equal(stamp('refs/heads/zzz-older'), Date.parse('2024-01-02T08:00:00Z'));
+  assert.equal(stamp('refs/heads/aaa-newer'), Date.parse('2024-01-02T08:30:00Z'));
+  assert.equal(stamp('refs/tags/annotated-old'), stamp('refs/heads/zzz-older'));
+  assert.equal(stamp('refs/tags/lightweight-new'), stamp('refs/heads/aaa-newer'));
+  assert.equal(stamp('refs/remotes/origin/newer'), stamp('refs/heads/aaa-newer'));
+  assert.ok(!refs.some(ref => ref.value === 'refs/remotes/origin/HEAD'));
+  const dates = refs.slice(2).map(ref => Date.parse(ref.committedAt));
+  assert.deepEqual(dates, [...dates].sort((a, b) => b - a));
+});
+
+test('merged status follows main ancestry and remains unknown without a main or master baseline', async t => {
+  const { dir, git } = await fixture(t);
+  await git('checkout', '-b', 'feature/unmerged');
+  await git('commit', '--allow-empty', '-m', 'Feature only');
+  await git('checkout', 'main');
+  await git('update-ref', 'refs/remotes/origin/old', 'baseline');
+  const { context } = await openGitRepository(dir);
+  assert.equal(context.baseRef, 'refs/heads/main');
+  const merged = ref => context.refs.find(item => item.value === ref).merged;
+  assert.equal(merged('refs/heads/baseline'), true);
+  assert.equal(merged('refs/remotes/origin/old'), true);
+  assert.equal(merged('refs/heads/feature/unmerged'), false);
+  assert.equal(merged('refs/tags/v1'), false);
+  assert.ok(await (await openGitRepository(dir)).snapshot('refs/heads/baseline', 'project [test] with spaces.xml'), 'Merged branches can still be explicitly compared');
+  await git('branch', '-m', 'main', 'trunk');
+  const unknown = (await openGitRepository(dir)).context;
+  assert.equal(unknown.baseRef, '');
+  assert.equal(unknown.refs.find(item => item.value === 'refs/heads/baseline').merged, undefined);
 });
 
 test('Git file absence is explicit; symlinks are not read as project snapshots', async t => {
@@ -113,6 +159,28 @@ test('repository mode lists version-specific XML paths and supports different fi
   await assert.rejects(repo.snapshot('WORKTREE', 'linked-directory/outside.xml'), /Symlink/);
   await rm(join(dir, 'projects/renamed.xml'));
   assert.deepEqual((await repo.listFiles('WORKTREE')).paths, ['local.xml']);
+});
+
+test('a project subfolder stays distinct from its containing repository and a nested repository uses its own branches', async t => {
+  const { dir, git } = await fixture(t);
+  const folder = join(dir, 'soapui_development');
+  await mkdir(folder);
+  const nestedFile = join(folder, 'project.xml');
+  await writeFile(nestedFile, '<soapui-project/>');
+  await git('add', '--', '.'); await git('commit', '-m', 'Nested project');
+  const project = await openGitRepository(folder + '/');
+  assert.equal(project.context.folder, folder);
+  assert.equal(project.context.repository, await realpath(dir));
+  assert.equal(project.context.folderPrefix, 'soapui_development');
+  assert.equal(project.context.branch, 'main');
+  assert.equal((await openGitRepository(nestedFile)).context.path, 'soapui_development/project.xml');
+  assert.ok((await project.listFiles('HEAD')).paths.includes('soapui_development/project.xml'));
+  await exec('git', ['-C', folder, 'init', '-b', 'feature/nested']);
+  const nested = await openGitRepository(folder);
+  assert.equal(nested.context.repository, await realpath(folder));
+  assert.equal(nested.context.folderPrefix, '');
+  assert.equal(nested.context.branch, 'feature/nested');
+  assert.ok(!nested.context.refs.some(ref => ref.value === 'refs/heads/main'), 'Never borrow branches from the parent repository');
 });
 
 test('helper starts without a file and accepts an explicit repository folder from its own viewer', async t => {

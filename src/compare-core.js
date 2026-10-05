@@ -5,6 +5,15 @@ import { SOAP_NS, kinds, parents, readXmlFile } from './core.js';
 const escapeText = value => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r/g, '&#13;');
 const escapeAttribute = value => escapeText(value).replace(/"/g, '&quot;').replace(/\n/g, '&#10;').replace(/\t/g, '&#9;');
 
+// Only omit the hierarchy item's own SoapUI identity attribute. Payload IDs,
+// property values and script text must still participate in the comparison.
+function comparisonXml(node, original, includeIds) {
+  const xml = node?.[original ? 'raw' : 'xml'] || '';
+  if (includeIds) return xml;
+  return xml.replace(/^<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*\/?>/, open =>
+    open.replace(/\s+([^\s=/>]+)\s*=\s*(?:"[^"]*"|'[^']*')/g, (attribute, name) => name === 'id' ? '' : attribute));
+}
+
 // Capture each hierarchy item's own XML. Descendant suites/cases/steps have their
 // own entries, so a project never needs a second copy of every script it contains.
 export function createComparisonParser() {
@@ -89,15 +98,16 @@ export const parseComparisonFile = (file, progress) => readXmlFile(file, createC
 
 // Match unique IDs first, then unique names within the same parent. Never guess
 // between duplicate names/IDs. A move to another parent is an addition + removal.
-export function compareProjects(before, after, { includeFormatting = false } = {}) {
+export function compareProjects(before, after, { includeFormatting = false, includeIds = false } = {}) {
   const entries = [];
   const counts = { added: 0, removed: 0, modified: 0, unchanged: 0 };
   const kindsChanged = { project: 0, suite: 0, case: 0, step: 0 };
   function visit(left, right, parentId = null) {
+    const leftXml = comparisonXml(left, false, includeIds), rightXml = comparisonXml(right, false, includeIds);
     const entry = { id: entries.length, parentId, kind: (right || left).kind, name: (right || left).name,
       beforeName: left?.name ?? null, afterName: right?.name ?? null, children: [], left, right,
-      ownChanged: !!left && !!right && left.xml !== right.xml,
-      ownFormattingChanged: !!left && !!right && left.xml === right.xml && left.raw !== right.raw, reordered: false, orderChanged: false };
+      includeIds, ownChanged: !!left && !!right && leftXml !== rightXml,
+      ownFormattingChanged: !!left && !!right && leftXml === rightXml && comparisonXml(left, true, includeIds) !== comparisonXml(right, true, includeIds), reordered: false, orderChanged: false };
     entries.push(entry);
     const a = left?.children || [], b = right?.children || [];
     const pairs = new Map(), used = new Set();
@@ -119,7 +129,7 @@ export function compareProjects(before, after, { includeFormatting = false } = {
     }
     // Identical duplicate siblings at the same position are safe to retain.
     // Changed ambiguous siblings remain separate additions/removals.
-    const identical = (x, y) => x.kind === y.kind && x.xml === y.xml && x.children.length === y.children.length
+    const identical = (x, y) => x.kind === y.kind && comparisonXml(x, false, includeIds) === comparisonXml(y, false, includeIds) && x.children.length === y.children.length
       && x.children.every((child, i) => identical(child, y.children[i]));
     for (let i = 0; i < Math.min(a.length, b.length); i++) {
       if (!used.has(a[i]) && !pairs.has(b[i]) && identical(a[i], b[i])) { pairs.set(b[i], a[i]); used.add(a[i]); }
@@ -217,8 +227,7 @@ function displayLines(xml, original) {
 }
 
 export function createXmlDiff(entry, { original = false } = {}) {
-  const field = original ? 'raw' : 'xml';
-  const left = displayLines(entry.left?.[field], original), right = displayLines(entry.right?.[field], original);
+  const left = displayLines(comparisonXml(entry.left, original, entry.includeIds), original), right = displayLines(comparisonXml(entry.right, original, entry.includeIds), original);
   const changes = diffArrays(left.map(l => l.text), right.map(l => l.text), { timeout: 750, maxEditLength: 2000 });
   // A bounded fallback still shows all text; it simply forgoes fine alignment.
   const blocks = changes || [{ removed: true, count: left.length }, { added: true, count: right.length }];
