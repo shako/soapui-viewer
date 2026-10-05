@@ -204,3 +204,64 @@ test('helper starts without a file and accepts an explicit repository folder fro
   assert.equal((await fetch(url + 'file' + query + '&path=' + encodeURIComponent(list.paths[0]))).status, 200, 'Failed repository selection preserves the previous session');
   assert.equal((await fetch(url + 'repository', { ...options, body: 'invalid json' })).status, 400);
 });
+
+test('repository history survives helper restarts, preserves subfolders, deduplicates and clears without closing the repository', async t => {
+  const { dir } = await fixture(t);
+  const folder = join(dir, 'SoapUI projects');
+  await mkdir(folder);
+  const stateDir = await mkdtemp(join(tmpdir(), 'soapui-history-test-'));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  const historyFile = join(stateDir, 'state', 'repositories.json');
+  const template = '<script></script>';
+  const first = await startGitServer(await openGitRepository(folder), template, { historyFile });
+  await new Promise(resolve => first.server.close(resolve));
+  assert.deepEqual(JSON.parse(await readFile(historyFile, 'utf8')), [folder]);
+  const { server, url } = await startGitServer(null, template, { historyFile });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const config = async () => JSON.parse((await (await fetch(url)).text()).match(/globalThis.SOAPUI_GIT=(.*);\n/)[1]);
+  assert.deepEqual((await config()).repositoryHistory, [folder]);
+  assert.equal((await config()).repository, undefined, 'History does not open a repository without selecting it');
+  const post = (route, data, origin = new URL(url).origin) => fetch(url + route, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+  const open = async path => {
+    const response = await post('repository', { path });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  await open(dir);
+  const selected = await open(folder + '/');
+  assert.deepEqual(selected.repositoryHistory, [folder, dir]);
+  assert.equal((await open(folder)).repositoryHistory.length, 2);
+  assert.equal((await post('repository', { path: join(dir, 'missing', 'no-repository') })).status, 400);
+  assert.deepEqual(JSON.parse(await readFile(historyFile, 'utf8')), [folder, dir], 'Invalid folders are never added');
+  assert.equal((await post('repository-history/clear', {}, 'https://example.invalid')).status, 403);
+  assert.equal((await fetch(url + 'repository-history/clear', { method: 'POST' })).status, 403);
+  assert.equal((await fetch(url + 'repository-history/clear')).status, 404, 'Reads cannot clear history');
+  assert.deepEqual((await config()).repositoryHistory, [folder, dir]);
+  assert.deepEqual((await (await post('repository-history/clear', {})).json()).repositoryHistory, []);
+  assert.deepEqual(JSON.parse(await readFile(historyFile, 'utf8')), []);
+  const current = await config();
+  assert.equal(current.repository, selected.repository);
+  assert.deepEqual(current.repositoryHistory, [], 'Refreshing the current repository does not restore cleared history');
+  const restarted = await startGitServer(null, template, { historyFile });
+  t.after(() => new Promise(resolve => restarted.server.close(resolve)));
+  assert.match(await (await fetch(restarted.url)).text(), /"repositoryHistory":\[\]/);
+});
+
+test('history keeps the latest 20 folders and reports unreadable or unwritable storage without blocking Git', async t => {
+  const { dir } = await fixture(t);
+  const historyFile = join(dir, 'history.json');
+  await writeFile(historyFile, JSON.stringify(Array.from({ length: 25 }, (_, i) => `/old/folder-${i}`)));
+  const project = await openGitRepository(dir);
+  const bounded = await startGitServer(project, '<script></script>', { historyFile });
+  t.after(() => new Promise(resolve => bounded.server.close(resolve)));
+  const paths = JSON.parse(await readFile(historyFile, 'utf8'));
+  assert.equal(paths.length, 20);
+  assert.deepEqual(paths.slice(0, 2), [dir, '/old/folder-0']);
+  const blocked = await startGitServer(project, '<script></script>', { historyFile: join(historyFile, 'not-a-directory.json') });
+  t.after(() => new Promise(resolve => blocked.server.close(resolve)));
+  assert.match(await (await fetch(blocked.url)).text(), /Repository history could not be saved to disk/);
+  const response = await fetch(blocked.url + 'files?repository=' + encodeURIComponent(project.context.repository) + '&ref=HEAD');
+  assert.equal(response.status, 200);
+});

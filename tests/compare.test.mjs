@@ -127,6 +127,45 @@ test('missing entire file is an addition/removal and UTF-16 file reading works',
   assert.equal(compareProjects(data, null).counts.removed, 4);
 });
 
+test('inline accents isolate multiple edits in one path while preserving identical text', () => {
+  const before = String.raw`keyFilePath="\\keys\\rsa\\chain\\blue\\store.jks"`;
+  const after = String.raw`keyFilePath="\\keys\\mix\\chainRSA\\blue\\store.p12"`;
+  const result = compare(project(step('Upload', before)), project(step('Upload', after)));
+  const diff = createXmlDiff(result.entries.at(-1));
+  const row = diffPage(diff).rows.find(row => row.left?.text.includes('keyFilePath'));
+  const changed = side => row[side].parts.filter(part => part.changed).map(part => part.text);
+  assert.deepEqual(changed('left'), ['rsa', 'jks']);
+  assert.deepEqual(changed('right'), ['mix', 'RSA', 'p12']);
+  for (const side of ['left', 'right']) {
+    assert.equal(row[side].parts.map(part => part.text).join(''), row[side].text);
+    assert.ok(row[side].parts.some(part => !part.changed && part.text.includes('blue')));
+  }
+  assert.ok(diff.rows.every(row => !row.left?.parts && !row.right?.parts), 'Only the returned page gets inline accents');
+});
+
+test('inline accents preserve Unicode, whitespace, added lines and bounded fallback text', () => {
+  const before = project(step('A', '\nvalue="🔴";\tassert true\nend'));
+  const after = project(step('A', '\nvalue="🟢";  assert true\nlog.info "added"\nend'));
+  const result = compare(before, after);
+  for (const original of [false, true]) {
+    const rows = diffPage(createXmlDiff(result.entries.at(-1), { original }), 0, false).rows;
+    for (const row of rows) for (const side of ['left', 'right']) {
+      if (!row[side]?.parts) continue;
+      assert.equal(row[side].parts.map(part => part.text).join(''), row[side].text);
+      assert.ok(row[side].parts.every(part => part.text.isWellFormed()));
+    }
+    const edited = rows.find(row => row.left?.text.includes('🔴'));
+    assert.ok(edited.left.parts.some(part => part.changed && part.text.includes('🔴')));
+    assert.ok(edited.right.parts.some(part => part.changed && part.text.includes('🟢')));
+    const added = rows.find(row => !row.left && row.right?.text.includes('log.info'));
+    assert.deepEqual(added.right.parts, [{ text: added.right.text, changed: true }]);
+  }
+  const dense = compare(project(step('A', 'a'.repeat(900))), project(step('A', 'b'.repeat(900))));
+  const row = diffPage(createXmlDiff(dense.entries.at(-1))).rows.find(row => row.left?.text.includes('a'.repeat(900)));
+  assert.ok(row.right.text.includes('b'.repeat(900)));
+  assert.equal(row.left.parts, undefined, 'Dense edits keep their full line background when the character diff reaches its limit');
+});
+
 test('bounded diff pages expose every character, including long Unicode lines and a final change', () => {
   const text = 'a😀'.repeat(100000);
   const result = compare(project(step('A', text)), project(step('A', text + 'END')));

@@ -1,5 +1,5 @@
 import { SaxesParser } from 'saxes';
-import { diffArrays } from 'diff';
+import { diffArrays, diffChars } from 'diff';
 import { SOAP_NS, kinds, parents, readXmlFile } from './core.js';
 
 const escapeText = value => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r/g, '&#13;');
@@ -40,7 +40,7 @@ export function createComparisonParser() {
     const attributes = Object.fromEntries(Object.values(tag.attributes).map(a => [a.name, a.value]));
     let node = parent?.node;
     if (isNode) {
-      node = { id: nodes.length, kind, name: attr('name') || '(unnamed)', soapId: attr('id') || '', children: [], xml: '', raw: '', start: tagStart, end: 0 };
+      node = { id: nodes.length, kind, name: attr('name') || '(unnamed)', soapId: attr('id') || '', disabled: attr('disabled') === 'true', children: [], xml: '', raw: '', start: tagStart, end: 0 };
       nodes.push(node);
       if (parent) parent.node.children.push(node);
       else root = node;
@@ -106,6 +106,7 @@ export function compareProjects(before, after, { includeFormatting = false, incl
     const leftXml = comparisonXml(left, false, includeIds), rightXml = comparisonXml(right, false, includeIds);
     const entry = { id: entries.length, parentId, kind: (right || left).kind, name: (right || left).name,
       beforeName: left?.name ?? null, afterName: right?.name ?? null, children: [], left, right,
+      beforeDisabled: left?.disabled ?? null, afterDisabled: right?.disabled ?? null,
       includeIds, ownChanged: !!left && !!right && leftXml !== rightXml,
       ownFormattingChanged: !!left && !!right && leftXml === rightXml && comparisonXml(left, true, includeIds) !== comparisonXml(right, true, includeIds), reordered: false, orderChanged: false };
     entries.push(entry);
@@ -246,6 +247,18 @@ export function createXmlDiff(entry, { original = false } = {}) {
   return { rows, fallback: !changes };
 }
 
+// Compute character accents only for the displayed page, with bounded work per row.
+function inlineChanges(row) {
+  if (row.status !== 'changed') return row;
+  const { left, right } = row;
+  const changes = left && right ? diffChars(left.text, right.text, { timeout: 5, maxEditLength: 256 }) : null;
+  if (left && right && !changes) return row;
+  const parts = side => !changes ? [{ text: row[side].text, changed: true }]
+    : changes.filter(change => !(side === 'left' ? change.added : change.removed))
+      .map(change => ({ text: change.value, changed: !!(change.added || change.removed) }));
+  return { ...row, left: left ? { ...left, parts: parts('left') } : null, right: right ? { ...right, parts: parts('right') } : null };
+}
+
 export function diffPage(diff, page = 0, changesOnly = true) {
   const indexes = [];
   for (let i = 0; i < diff.rows.length; i++) {
@@ -258,5 +271,5 @@ export function diffPage(diff, page = 0, changesOnly = true) {
   const pages = Math.max(1, Math.ceil(indexes.length / 120));
   page = Math.max(0, Math.min(pages - 1, page));
   return { page, pages, totalRows: diff.rows.length, fallback: diff.fallback,
-    rows: indexes.slice(page * 120, (page + 1) * 120).map((index, i) => ({ ...diff.rows[index], gap: index > (indexes[page * 120 + i - 1] ?? -1) + 1 })) };
+    rows: indexes.slice(page * 120, (page + 1) * 120).map((index, i) => ({ ...inlineChanges(diff.rows[index]), gap: index > (indexes[page * 120 + i - 1] ?? -1) + 1 })) };
 }

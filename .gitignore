@@ -9,6 +9,7 @@ private-projects/
 .agents/
 .env
 .env.*
+.soapui-viewer/
 
 # Keep customer exports, recordings and credentials out of this public repo.
 *.xml

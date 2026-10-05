@@ -368,8 +368,8 @@ function renderTree() {
     icon.setAttribute('aria-hidden', 'true');
     const identity = el('span', 'node-identity');
     identity.append(name);
+    if (node.disabled) identity.append(el('span', 'disabled-label', 'Disabled'));
     row.append(arrow, icon, identity);
-    if (node.disabled) row.append(el('span', 'disabled-label', 'disabled'));
     if (state.query && hit?.own) {
       const label = [hit.name && 'name', hit.properties && 'properties', hit.content && 'content'].filter(Boolean).join(' + ');
       row.append(el('span', 'hit-kind', label));

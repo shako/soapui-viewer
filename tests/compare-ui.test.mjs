@@ -136,6 +136,52 @@ test('Compare UI drops files, reports invalid input and does not render XML as H
   assert.equal(ui.$('compare-run').disabled, false);
 });
 
+test('inline highlights render changed text safely and keep whitespace markers in original XML', async t => {
+  const ui = await setup(t);
+  const xml = text => `<soapui-project name="P"><testSuite name="S"><testCase name="C"><testStep name="Script"><config><script><![CDATA[\n${text}\n]]></script></config></testStep></testCase></testSuite></soapui-project>`;
+  const before = 'file="store.jks";\tlog.info "<img src=x>"';
+  const after = 'file="store.p12";  log.info "<script>alert(1)</script>"';
+  ui.comparison.drop([new File([xml(before)], 'before.xml'), new File([xml(after)], 'after.xml')]);
+  await ui.click('compare-run');
+  await ui.click(ui.document.querySelector('[role=treeitem][aria-label^="Step Script,"]'));
+  const left = () => ui.$('compare-detail').querySelector('.diff-cell.removed code');
+  const right = () => ui.$('compare-detail').querySelector('.diff-cell.added code');
+  assert.equal(left().textContent, before);
+  assert.equal(right().textContent, after);
+  assert.ok([...left().querySelectorAll('mark')].some(mark => mark.textContent === 'jks'));
+  assert.ok([...right().querySelectorAll('mark')].some(mark => mark.textContent === 'p12'));
+  assert.ok(![...right().querySelectorAll('mark')].some(mark => mark.textContent.includes('log.info')));
+  assert.equal(ui.$('compare-detail').querySelectorAll('img,script').length, 0);
+  await ui.check(ui.document.querySelectorAll('#compare-detail .field-controls input')[1], true);
+  assert.equal(left().textContent, before.replaceAll(' ', '·').replaceAll('\t', '⇥'));
+  assert.equal(right().textContent, after.replaceAll(' ', '·'));
+  assert.ok([...right().querySelectorAll('mark')].some(mark => mark.textContent.includes('··')));
+});
+
+test('disabled badges distinguish both versions, additions and removals without marking enabled children', async t => {
+  const ui = await setup(t);
+  const xml = '<soapui-project name="P"><testSuite name="S" disabled="true"><testCase name="C" disabled="true"><testStep name="Paused" disabled="true"/><testStep name="Active" disabled="false"/><testStep name="Default"/><testStep name="Removed" disabled="true"/></testCase></testSuite></soapui-project>';
+  const after = xml.replace('name="Paused" disabled="true"', 'name="Paused" disabled="false"')
+    .replace('name="Active" disabled="false"', 'name="Active" disabled="true"').replace('name="Removed"', 'name="Added"');
+  ui.comparison.drop([new File([xml], 'before.xml'), new File([after], 'after.xml')]);
+  await ui.click('compare-run');
+  await ui.check(ui.$('compare-only-changes'), false);
+  const row = name => [...ui.document.querySelectorAll('[role=treeitem]')].find(item => item.querySelector('.node-name').textContent === name);
+  const label = name => row(name).querySelector('.node-identity .disabled-label')?.textContent;
+  assert.equal(label('P'), undefined);
+  assert.equal(label('Default'), undefined, 'Parent status does not replace the child’s own disabled flag');
+  for (const name of ['S', 'C', 'Added', 'Removed']) assert.equal(label(name), 'Disabled');
+  assert.equal(label('Paused'), 'Disabled → Enabled');
+  assert.equal(label('Active'), 'Enabled → Disabled');
+  assert.match(row('Paused').getAttribute('aria-label'), /Disabled → Enabled/);
+  for (const [name, expected] of [['Paused', [true, false]], ['Active', [false, true]], ['Added', [false, true]], ['Removed', [true, false]]]) {
+    await ui.click(row(name));
+    const headers = [...ui.document.querySelectorAll('.diff-head strong')];
+    assert.deepEqual(headers.map(header => !!header.querySelector('.disabled-label')), expected, name);
+    assert.match(ui.$('compare-detail').querySelector('.detail-kind').textContent, /Disabled/);
+  }
+});
+
 test('Git mode stops when the working file is missing instead of displaying every item as removed', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -323,6 +369,40 @@ test('comparison setup and filters live in the sidebar and collapse after succes
   await ui.click('compare-swap');
   assert.ok(ui.$('compare-settings').hasAttribute('open'));
   assert.match(ui.$('compare-source-summary').textContent, /example-after.xml → example-before.xml/);
+});
+
+test('repository history prefills the last folder, opens a saved folder and clears history without losing the active comparison setup', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const paths = ['/synthetic/SoapUI projects', '/synthetic/older <repo>'];
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    if (url.endsWith('/repository-history/clear')) return Response.json({ repositoryHistory: [], historyWarning: '' });
+    if (url.endsWith('/repository')) {
+      const { path } = JSON.parse(options.body);
+      return Response.json({ repository: path, folder: path, branch: 'main', refs: [{ value: 'HEAD', label: 'HEAD' }, { value: 'WORKTREE', label: 'Working copy' }], repositoryHistory: [path, ...paths.filter(p => p !== path)] });
+    }
+    return Response.json({ paths: ['project.xml'] });
+  };
+  const ui = await setup(t, { base: '/session/', repositoryHistory: paths });
+  assert.equal(requests.length, 0, 'Prefilling history must not open a folder automatically');
+  assert.equal(ui.$('git-repository').value, paths[0]);
+  assert.equal(ui.$('git-history-list').querySelector('repo'), null);
+  ui.$('git-repository').dispatchEvent(new ui.window.Event('focus'));
+  assert.equal(ui.$('git-history').open, true);
+  await ui.click(ui.$('git-history-list').children[1]);
+  assert.deepEqual(JSON.parse(requests[0].options.body), { path: paths[1] });
+  assert.equal(ui.$('git-repository').value, paths[1]);
+  assert.equal(ui.$('git-history').open, false);
+  assert.equal(ui.$('git-history-list').children[0].textContent, paths[1]);
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
+  await ui.click('git-clear-history');
+  assert.equal(requests.at(-1).options.method, 'POST');
+  assert.equal(ui.$('git-clear-history').disabled, true);
+  assert.match(ui.$('git-history-list').textContent, /No recent repositories/);
+  assert.equal(ui.$('git-repository').value, paths[1], 'Clearing history keeps the open repository');
+  assert.equal(ui.$('git-after').value, 'WORKTREE');
 });
 
 test('enter a Git folder, choose separate paths per branch, swap and return to linked paths without drops', async t => {

@@ -31,7 +31,7 @@ You can also download the repository with **Code → Download ZIP**, extract it,
 
 **Search in** limits matches to **All text**, **Names** (project, suite, case and step names), **Properties** (custom property names and values on projects, suites, cases and in step configurations), or **Content** (scripts, requests and other fields, excluding those names and properties). Tree matches, summary counts and content highlights all follow this filter. Use **Include fields without matches** to inspect other fields for context.
 
-Search is literal, case-insensitive by default, with an optional case-sensitive mode. It is not a regular-expression search. Disabled test steps are included.
+Search is literal, case-insensitive by default, with an optional case-sensitive mode. It is not a regular-expression search. Disabled suites, cases and steps are included and carry a subtle **Disabled** badge beside their name in Viewer and Compare. A status change appears as **Enabled → Disabled** or **Disabled → Enabled**; the XML column headings identify which version is disabled.
 
 **Keyboard:** `⌘K` / `Ctrl+K` focuses search. Arrow keys and Home/End navigate the project tree. Press Tab from the tree to reach **Copy** for the selected row, then Enter or Space to copy its name. The column divider also supports keyboard resizing after focusing it with Tab.
 
@@ -44,7 +44,7 @@ The current source build includes **Viewer / Compare** in the same standalone HT
 3. Select **Compare**. Setup collapses automatically after a successful comparison; click **Comparison setup** to reopen it. **Only changes** is on by default; switch it off to include unchanged items.
 4. Select a project, suite, case or step. The tree marks additions, removals, changes and changes in child order. Parent status and counts include changes in descendants. Collapsing a branch also closes all its descendants, which stay closed when you reopen it. **Copy** is beside the change badge on the right.
 5. **Include formatting changes** is off by default. Turn it on to expose changes in attribute order, indentation, quote style, CDATA spelling or empty-element syntax. These branches are marked **≈ Formatting** when they contain no semantic changes; they are included in the changed count. This updates the comparison without rereading files.
-6. Inspect the formatted XML side by side: red is before, green is after. **Show unchanged XML lines** reveals all context. **Previous / Next** pages through long fragments without truncating their contents. The XML area scrolls independently, with paging at the bottom. Extra explanations and child links are under **Details and changed children**.
+6. Inspect the formatted XML side by side: red is before, green is after. Within changed lines, darker red/green highlights the changed characters automatically; matching text keeps the lighter background. Dense edits may retain only the line background when fine highlighting reaches its limit. **Show unchanged XML lines** reveals all context. **Previous / Next** pages through long fragments without truncating their contents. The XML area scrolls independently, with paging at the bottom. Extra explanations and child links are under **Details and changed children**.
 
 **Try an example** demonstrates a renamed step, a changed Groovy statement and an added step using fictional data. Viewer and Compare keep their own state when you switch modes. Comparison files stay in memory and are not added to Recent; **Clear** releases the comparison.
 
@@ -84,13 +84,15 @@ An XML file path is still accepted as the optional argument, to preselect that f
 3. If you want a different file on that branch, select **Choose a different file**. This leaves your working file unchanged. **Use the working file path again** restores the default. If either file is missing, comparison stops with its version, path and repository in the message. Choose another branch/file or open the correct repository; a missing file is never treated as an empty project.
 4. Select **Compare**. The branch version is Before and your working copy is After. Commit hashes appear with loaded Git snapshots in setup.
 
+**Recent repositories** remembers the last 20 successfully opened folders, newest first. Click the folder field to reveal the list, or expand **Recent repositories**, then click a path to reopen it. The most recent path is prefilled on startup; it opens only when you select **Open** or a history entry. **Clear history** forgets the list without closing your current repository. Paths are saved locally in `.soapui-viewer/repositories.json` inside the viewer application folder, which is excluded by `.gitignore`. This survives helper restarts and changing localhost ports; no XML contents are saved there.
+
 A subfolder remains in the folder field. Its containing Git repository is shown separately, and the file chooser initially searches that subfolder. Clear the search to browse the rest of the repository. Branches always belong to that repository: to compare branches from another clone, open that clone's folder. A repository with only one branch is identified explicitly.
 
 Branches and tags are sorted by latest commit, newest first, with local date and time. Merged branches are hidden by default except the baseline, current branch and selected version; **Show merged branches** reveals them. The list reports how many are hidden. This uses local ancestry relative to main/master, not PR status. Reopen the repository to refresh its branches; no fetch is performed.
 
 The working-copy list includes tracked and untracked, non-ignored XML files that currently exist. An ignored XML path can still be entered explicitly. Unsaved editor changes are not included. This is a comparison of two selected project files, not a directory diff. Both selected files must exist.
 
-The helper does not fetch, check out, write, execute project scripts or modify your repository. Stop it with **Ctrl+C**. If the browser does not open automatically, use the local URL printed in Terminal.
+The helper does not fetch, check out, execute project scripts or modify the compared repository. It only writes its own local repository history. Stop it with **Ctrl+C**. If the browser does not open automatically, use the local URL printed in Terminal.
 
 It binds only to `127.0.0.1` on a temporary port and uses a random session URL. Reads are confined to regular `.xml` files in the chosen repository; path traversal, `.git` paths and symlinks are rejected. Files are limited to 256 MiB. Repository selection is accepted only from the helper's own page. Its page permits requests to that local origin; the downloaded standalone HTML continues to block network connections and compares manually selected files.
 

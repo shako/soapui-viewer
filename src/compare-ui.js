@@ -17,6 +17,9 @@ const button = (text, action) => {
 const badges = { added: '+ Added', removed: '− Removed', modified: '~ Changed', unchanged: '= Unchanged' };
 const badge = entry => entry.formattingOnly ? '≈ Formatting' : badges[entry.status];
 const kinds = { project: 'Project', suite: 'Suite', case: 'Case', step: 'Step' };
+const disabledLabel = entry => entry.beforeDisabled != null && entry.afterDisabled != null && entry.beforeDisabled !== entry.afterDisabled
+  ? entry.afterDisabled ? 'Enabled → Disabled' : 'Disabled → Enabled'
+  : entry.afterDisabled || entry.beforeDisabled ? 'Disabled' : '';
 
 export function setupComparison(rpc, copyText) {
   let files = { before: null, after: null };
@@ -84,6 +87,26 @@ export function setupComparison(rpc, copyText) {
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   }
+  function renderHistory() {
+    const paths = git?.repositoryHistory || [];
+    $('git-history-summary').textContent = `Recent repositories (${paths.length})`;
+    $('git-clear-history').disabled = busy || !paths.length;
+    $('git-history-warning').textContent = git?.historyWarning || '';
+    $('git-history-warning').hidden = !git?.historyWarning;
+    const list = $('git-history-list');
+    list.replaceChildren();
+    for (const path of paths) {
+      const open = button(path, () => {
+        if (busy) return;
+        $('git-repository').value = path;
+        $('git-open-repository').click();
+      });
+      open.title = path;
+      open.disabled = busy;
+      list.append(open);
+    }
+    if (!paths.length) list.append(el('p', 'source-meta', 'No recent repositories. Open a Git folder to remember it here.'));
+  }
   async function loadPaths(side) {
     const ref = $('git-' + side).value;
     paths[side] = [];
@@ -143,6 +166,7 @@ export function setupComparison(rpc, copyText) {
   $('git-file-close').addEventListener('click', () => $('git-file-dialog').close());
   async function configureGit(context) {
     git = { ...context, base: git.base };
+    renderHistory();
     $('git-repository').value = git.folder || git.repository;
     $('git-repository-root').hidden = !git.folder || git.folder === git.repository;
     $('git-repository-root').textContent = `This folder belongs to the Git repository: ${git.repository}`;
@@ -176,6 +200,19 @@ export function setupComparison(rpc, copyText) {
     try {
       const context = await gitJSON('repository', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: $('git-repository').value }) });
       await configureGit(context);
+      $('git-history').open = false;
+    } finally { setBusy(false); }
+  }));
+  $('git-repository').addEventListener('focus', () => {
+    if (git?.repositoryHistory?.length) $('git-history').open = true;
+  });
+  $('git-clear-history').addEventListener('click', guard(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      Object.assign(git, await gitJSON('repository-history/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));
+      renderHistory();
+      if (!git.repository) $('git-repository').value = '';
     } finally { setBusy(false); }
   }));
   $('git-repository').addEventListener('keydown', event => {
@@ -222,6 +259,7 @@ export function setupComparison(rpc, copyText) {
     $('compare-ids').disabled = value;
     $('compare-progress').hidden = !value;
     $('git-path-after').disabled = value || (!workingComparison() && $('git-same-path').checked && $('git-after').value !== 'file');
+    $('git-clear-history').disabled = value || !git?.repositoryHistory?.length;
   }
   async function source(side) {
     const ref = $('git-' + side).value;
@@ -346,7 +384,8 @@ export function setupComparison(rpc, copyText) {
       row.setAttribute('role', 'treeitem');
       row.setAttribute('aria-level', depth + 1);
       row.setAttribute('aria-selected', entry.id === selected);
-      row.setAttribute('aria-label', `${kinds[entry.kind]} ${entry.name}, ${badge(entry)}${entry.reordered ? ', order changed' : ''}`);
+      const disabled = disabledLabel(entry);
+      row.setAttribute('aria-label', `${kinds[entry.kind]} ${entry.name}, ${badge(entry)}${entry.reordered ? ', order changed' : ''}${disabled ? `, ${disabled}` : ''}`);
       if (entry.children.length) row.setAttribute('aria-expanded', !collapsed.has(entry.id));
       row.title = `${kinds[entry.kind]}: ${entry.name}`;
       row.append(el('span', 'tree-toggle', entry.children.length ? collapsed.has(entry.id) ? '▸' : '▾' : ''), el('span', `node-icon ${entry.kind}`, kinds[entry.kind][0]));
@@ -361,6 +400,7 @@ export function setupComparison(rpc, copyText) {
       copy.tabIndex = entry.id === selected ? 0 : -1;
       copy.setAttribute('aria-label', `Copy ${entry.name}`);
       identity.append(el('span', 'node-name', entry.name));
+      if (disabled) identity.append(el('span', 'disabled-label', disabled));
       row.append(identity, copy, el('span', `change-badge ${entry.formattingOnly ? 'formatting' : entry.status}`, entry.reordered ? '↕ Order' : badge(entry)));
       row.addEventListener('click', guard(async () => {
         selected = entry.id;
@@ -415,7 +455,8 @@ export function setupComparison(rpc, copyText) {
     const head = el('div', 'detail-head');
     const path = []; let ancestor = entry;
     while (ancestor) { path.unshift(ancestor.name); ancestor = result.entries[ancestor.parentId]; }
-    head.append(el('p', 'breadcrumb', path.join(' › ')), el('p', 'detail-kind', `${kinds[entry.kind]} · ${badge(entry)}`), el('h2', '', entry.beforeName && entry.afterName && entry.beforeName !== entry.afterName ? `${entry.beforeName} → ${entry.afterName}` : entry.name));
+    const disabled = disabledLabel(entry);
+    head.append(el('p', 'breadcrumb', path.join(' › ')), el('p', 'detail-kind', `${kinds[entry.kind]} · ${badge(entry)}${disabled ? ` · ${disabled}` : ''}`), el('h2', '', entry.beforeName && entry.afterName && entry.beforeName !== entry.afterName ? `${entry.beforeName} → ${entry.afterName}` : entry.name));
     const note = entry.reordered ? `Order changed: position ${entry.beforePosition} → ${entry.afterPosition}. ` : '';
     
     const body = el('div', 'compare-body');
@@ -458,10 +499,14 @@ export function setupComparison(rpc, copyText) {
       const mine = ++ticket;
       const data = await rpc('compare-detail', { nodeId: entry.id, page: number, changesOnly: !all.checked, original: original.checked });
       if (mine !== ticket || !result) return;
-      info.textContent = `${data.fallback ? 'Large change: showing complete blocks without fine alignment. ' : ''}Red = before · Green = after. ${original.checked ? 'Original XML, with nested hierarchy items omitted. Whitespace markers: · space, ⇥ tab, ␍ carriage return.' : 'Formatted XML fragments.'} Line numbers refer to these fragments; ↳ continues a long line.`;
+      info.textContent = `${data.fallback ? 'Large change: showing complete blocks without fine alignment. ' : ''}Red = before · Green = after. Darker highlights mark changed text within a line. ${original.checked ? 'Original XML, with nested hierarchy items omitted. Whitespace markers: · space, ⇥ tab, ␍ carriage return.' : 'Formatted XML fragments.'} Line numbers refer to these fragments; ↳ continues a long line.`;
       const content = document.createDocumentFragment();
       const headers = el('div', 'diff-row diff-head');
-      headers.append(el('strong', '', 'Before'), el('strong', '', 'After'));
+      for (const side of ['before', 'after']) {
+        const heading = el('strong', '', side === 'before' ? 'Before' : 'After');
+        if (entry[`${side}Disabled`]) heading.append(document.createTextNode(' '), el('span', 'disabled-label', 'Disabled'));
+        headers.append(heading);
+      }
       content.append(headers);
       if (!data.rows.length) {
         const message = el('p', 'diff-empty', entry.status === 'unchanged' ? 'No XML differences.' : 'No own XML differences. Changes are in the children or their order.');
@@ -473,7 +518,12 @@ export function setupComparison(rpc, copyText) {
         for (const side of ['left', 'right']) {
           const value = row[side];
           const cell = el('div', `diff-cell ${value && row.status === 'changed' ? side === 'left' ? 'removed' : 'added' : ''}`);
-          cell.append(el('span', 'diff-number', value ? `${value.continued ? '↳' : value.line} ${row.status === 'changed' ? side === 'left' ? '−' : '+' : ''}` : ''), el('code', '', original.checked ? (value?.text || '').replace(/ /g, '·').replace(/\t/g, '⇥').replace(/\r/g, '␍') : value?.text || ''));
+          const code = el('code');
+          for (const part of value?.parts || [{ text: value?.text || '' }]) {
+            const text = original.checked ? part.text.replace(/ /g, '·').replace(/\t/g, '⇥').replace(/\r/g, '␍') : part.text;
+            code.append(part.changed ? el('mark', 'diff-inline-change', text) : document.createTextNode(text));
+          }
+          cell.append(el('span', 'diff-number', value ? `${value.continued ? '↳' : value.line} ${row.status === 'changed' ? side === 'left' ? '−' : '+' : ''}` : ''), code);
           line.append(cell);
         }
         content.append(line);
@@ -495,6 +545,8 @@ export function setupComparison(rpc, copyText) {
     if (!git) return;
     $('compare-git-help').hidden = true;
     $('git-repository-controls').hidden = false;
+    renderHistory();
+    $('git-repository').value = git.folder || git.repository || git.repositoryHistory?.[0] || '';
     if (!git.repository) return;
     setBusy(true);
     $('compare-progress-label').textContent = 'Listing XML files…';

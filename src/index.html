@@ -62,6 +62,12 @@
                 <div id="git-repository-controls" class="git-repository-controls" hidden>
                   <label for="git-repository">Git repository folder</label>
                   <div class="repository-entry"><input id="git-repository" type="text" placeholder="/path/to/repository" autocomplete="off" spellcheck="false"><button id="git-open-repository" class="button secondary">Open</button></div>
+                  <details id="git-history" class="repository-history">
+                    <summary id="git-history-summary">Recent repositories</summary>
+                    <div class="repository-history-tools"><span>Most recent first · Saved on this computer</span><button id="git-clear-history" class="button quiet">Clear history</button></div>
+                    <div id="git-history-list" class="repository-history-list"></div>
+                  </details>
+                  <p id="git-history-warning" class="source-meta" role="status" hidden></p>
                   <p id="git-repository-root" class="source-meta" hidden></p>
                   <p id="git-note" class="source-meta" hidden></p>
                   <label id="git-show-merged-label" class="check" hidden><input id="git-show-merged" type="checkbox">Show merged branches</label>

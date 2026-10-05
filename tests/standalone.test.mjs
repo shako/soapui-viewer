@@ -84,6 +84,7 @@ test('standalone HTML embeds a working worker: imports, errors, search, detail a
   const changed = comparison.entries.find(entry => entry.kind === 'step' && entry.status === 'modified');
   const diff = await send('compare-detail', { nodeId: changed.id, changesOnly: true });
   assert.ok(diff.rows.some(row => row.right?.text.includes('assert false')));
+  assert.ok(diff.rows.some(row => row.right?.parts?.some(part => part.changed && part.text.includes('fals'))), 'The standalone worker returns inline differences');
   const formatting = await send('compare-options', { includeFormatting: true });
   assert.equal(formatting.counts.modified, 4);
   const original = await send('compare-detail', { nodeId: changed.id, original: true, changesOnly: true });

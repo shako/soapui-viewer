@@ -1,9 +1,9 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, mkdir, writeFile, rename } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 
@@ -106,10 +106,36 @@ export async function openGitRepository(inputPath) {
   };
 }
 
-export async function startGitServer(project, template) {
+export async function startGitServer(project, template, { historyFile } = {}) {
   const base = `/${randomBytes(24).toString('hex')}/`;
+  let repositoryHistory = [], historyWarning = '';
+  if (historyFile) {
+    try {
+      const saved = JSON.parse(await readFile(historyFile, 'utf8'));
+      if (!Array.isArray(saved) || saved.some(path => typeof path !== 'string')) throw new Error('Invalid history file.');
+      repositoryHistory = [...new Set(saved)].slice(0, 20);
+    } catch (error) {
+      if (error.code !== 'ENOENT') historyWarning = 'Could not read repository history. Reopen a folder to save a new history.';
+    }
+  }
+  const history = () => ({ repositoryHistory, historyWarning });
+  async function saveHistory(paths) {
+    repositoryHistory = paths;
+    if (!historyFile) return;
+    try {
+      await mkdir(dirname(historyFile), { recursive: true, mode: 0o700 });
+      const temporary = `${historyFile}.${base.slice(1, -1)}.tmp`;
+      await writeFile(temporary, JSON.stringify(paths, null, 2) + '\n', { mode: 0o600 });
+      await rename(temporary, historyFile);
+      historyWarning = '';
+    } catch {
+      historyWarning = 'Repository history could not be saved to disk. Changes to this list will be lost when the helper restarts.';
+    }
+  }
+  const remember = context => saveHistory([context.folder, ...repositoryHistory.filter(path => path !== context.folder)].slice(0, 20));
+  if (project) await remember(project.context);
   const html = () => {
-    const config = JSON.stringify({ ...project?.context, base }).replace(/</g, '\\u003c');
+    const config = JSON.stringify({ ...project?.context, ...history(), base }).replace(/</g, '\\u003c');
     return template.replace("connect-src 'none'", "connect-src 'self'")
       .replace('<script>', () => `<script>globalThis.SOAPUI_GIT=${config};\n`);
   };
@@ -124,13 +150,19 @@ export async function startGitServer(project, template) {
     if (request.headers.host !== new URL(origin).host || (request.headers.origin && request.headers.origin !== origin)) return reply(403, 'Local access only.');
     try {
       const url = new URL(request.url, origin);
+      if (request.method === 'POST' && url.pathname === `${base}repository-history/clear`) {
+        if (request.headers.origin !== origin || request.headers['content-type'] !== 'application/json') return reply(403, 'Clear history from the local viewer.');
+        await saveHistory([]);
+        return json(history());
+      }
       if (request.method === 'POST' && url.pathname === `${base}repository`) {
         if (request.headers.origin !== origin || request.headers['content-type'] !== 'application/json') return reply(403, 'Open a repository from the local viewer.');
         let body = '';
         for await (const chunk of request) { body += chunk; if (body.length > 16384) return reply(413, 'Repository path is too long.'); }
         const next = await openGitRepository(JSON.parse(body).path);
         project = next;
-        return json(project.context);
+        await remember(project.context);
+        return json({ ...project.context, ...history() });
       }
       if (request.method !== 'GET') return reply(405, 'Read-only helper.');
       if (url.pathname === base) {
@@ -165,7 +197,8 @@ async function main() {
   }
   const project = args[0] ? await openGitRepository(args[0]) : null;
   const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
-  const { server, url } = await startGitServer(project, html);
+  const historyFile = fileURLToPath(new URL('../.soapui-viewer/repositories.json', import.meta.url));
+  const { server, url } = await startGitServer(project, html, { historyFile });
   console.log(`SoapUI Git comparison${project ? `: ${project.context.repository}` : ''}\n${url}\nLocal access only. Stop with Ctrl+C.`);
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
   const browser = spawn(command, [url], { stdio: 'ignore' });
