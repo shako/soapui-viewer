@@ -1,21 +1,26 @@
 # SoapUI Viewer
 
-Find the test behind the text. Search large **SoapUI XML projects** and see exactly which project, test suite, test case and test step contains each match.
+Find the test behind the text. Search large **SoapUI XML projects**, or compare two versions, using a project → test suite → test case → test step tree.
 
-The viewer is a **single HTML file** that runs locally in your browser. No installation, server, internet connection, SoapUI installation or ReadyAPI license is needed to use it. The interface is in English.
+The interface is in English. No SoapUI installation or ReadyAPI license is needed.
 
-[Nederlandse handleiding](README.nl.md) · [Download the viewer](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html) · [Releases](https://github.com/shako/soapui-viewer/releases)
+| What you want to do | What you need |
+| --- | --- |
+| Search projects or compare two XML files | Open `dist/index.html` in your browser. No installation, server or internet connection needed after downloading. |
+| Compare your working file with a Git branch or tag | Download or clone this repository, install Node.js 22+ and Git, then run `npm run compare:git`. No build or `npm install` needed. |
+
+[Nederlandse handleiding](README.nl.md) · [Download current version (ZIP)](https://github.com/shako/soapui-viewer/archive/refs/heads/main.zip) · [Packaged releases](https://github.com/shako/soapui-viewer/releases)
 
 ## Get started
 
-1. Download **[SoapUI-Viewer.html](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)** from the latest release and keep it in a folder on your computer.
-2. Double-click it to open it in a recent desktop browser, such as Safari, Chrome, Edge or Firefox.
+1. Download the **[current repository ZIP](https://github.com/shako/soapui-viewer/archive/refs/heads/main.zip)** and extract it, or clone this repository. The ready-to-use viewer is `dist/index.html`.
+2. Double-click `dist/index.html` to open it in a recent desktop browser, such as Safari, Chrome, Edge or Firefox.
 3. Drop one or more complete SoapUI `.xml` project files onto the window, or click **Open projects**.
 4. Enter a search term, such as `CRL`. Select a result to see its full path and highlighted content.
 
 To try it without your own projects, click **Try an example with CRL**. This opens two fictional projects bundled with the viewer.
 
-You can also download the repository with **Code → Download ZIP**, extract it, and open `dist/index.html`. GitHub's source-file preview displays the HTML source; download the file before opening it.
+The repository ZIP is also available through **Code → Download ZIP**. GitHub's source-file preview displays the HTML source; download the file before opening it. The separately packaged **[SoapUI-Viewer.html release](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)** may lag behind `main` and omit newer features. Use the repository's `dist/index.html` for the features described here.
 
 ## What it does
 
@@ -37,7 +42,7 @@ Search is literal, case-insensitive by default, with an optional case-sensitive 
 
 ## Compare two project versions
 
-The current source build includes **Viewer / Compare** in the same standalone HTML file. Open `dist/index.html` to use it; a previously downloaded release may be older.
+Open `dist/index.html` to use **Viewer / Compare** in the same standalone HTML file. Comparing two files you choose from disk does not require the Git helper.
 
 1. Select **Compare**. **Comparison setup**, sources, filters and totals live in the left column; the XML panel uses the full available height on the right.
 2. Drop one complete project XML onto **Before** and one onto **After**, or use **Choose local XML**. Dropping two files together fills the two sides; check their labels and use **⇄** to swap them if needed.
@@ -61,11 +66,11 @@ Matching and limits:
 
 ## Compare local Git versions (optional)
 
-The optional helper reads your local Git repository and offers a version and XML file on each side. No dragging or exporting files is needed.
+The optional helper compares a file in your checked-out working copy with the same file on another branch or tag. You can choose a different file on the comparison side. No dragging, exporting or checking out the other branch is needed.
 
 You need **Node.js 22+ and Git**, plus a clone or ZIP of this repository. No build or `npm install` is required when using the included `dist/index.html`.
 
-From the SoapUI Viewer repository folder, start the helper:
+Open a terminal in the downloaded or cloned **SoapUI Viewer application folder**, where `package.json` is located, and start the helper. This is separate from the repository containing your SoapUI projects, which you choose afterwards:
 
 ```sh
 npm run compare:git
@@ -80,7 +85,7 @@ npm run compare:git -- "/absolute/path/to/your-repository"
 An XML file path is still accepted as the optional argument, to preselect that file.
 
 1. Under **Current working copy**, select **Choose working file** and choose your SoapUI XML. This uses your checked-out branch, including saved, uncommitted changes. You can also type a repository-relative path.
-2. Under **Compare with**, choose another **Branch**. Type in the dropdown to search. The same relative file path is used automatically; no checkout is needed. The list also supports HEAD and tags, and starts with main/master when available for a feature branch, otherwise HEAD.
+2. Under **Compare with**, choose another **Branch**. Type in the dropdown to search. The same relative file path is used automatically; no checkout is needed. The list also supports HEAD and tags.
 3. If you want a different file on that branch, select **Choose a different file**. This leaves your working file unchanged. **Use the working file path again** restores the default. If either file is missing, comparison stops with its version, path and repository in the message. Choose another branch/file or open the correct repository; a missing file is never treated as an empty project.
 4. Select **Compare**. The branch version is Before and your working copy is After. Commit hashes appear with loaded Git snapshots in setup.
 
@@ -95,6 +100,15 @@ The working-copy list includes tracked and untracked, non-ignored XML files that
 The helper does not fetch, check out, execute project scripts or modify the compared repository. It only writes its own local repository history. Stop it with **Ctrl+C**. If the browser does not open automatically, use the local URL printed in Terminal.
 
 It binds only to `127.0.0.1` on a temporary port and uses a random session URL. Reads are confined to regular `.xml` files in the chosen repository; path traversal, `.git` paths and symlinks are rejected. Files are limited to 256 MiB. Repository selection is accepted only from the helper's own page. Its page permits requests to that local origin; the downloaded standalone HTML continues to block network connections and compares manually selected files.
+
+## Sharing and updating
+
+- For search and comparing two XML files, share `dist/index.html`. You can rename it to `SoapUI-Viewer.html`; all required code and licenses are included. Open projects and history are not embedded in this file.
+- For Git comparisons, share the [repository link](https://github.com/shako/soapui-viewer). Each colleague downloads or clones it and starts their own helper using the instructions above. Your `127.0.0.1` / `localhost` URL only works on your computer. Everyone selects their own local Git repository; project files are not uploaded.
+
+To update a clone, run `git pull --ff-only` in the viewer application folder. For a ZIP download, download and extract a fresh copy of `main`. The updated `dist/index.html` is already built. Reopen the HTML, or stop a running Git helper with **Ctrl+C** and run `npm run compare:git` again. Refreshing an old helper session alone does not load the new build.
+
+Repository history belongs to that copy of the viewer application. A fresh ZIP in a different folder starts with its own history; keep `.soapui-viewer/repositories.json` in your application folder if you want to retain it when updating.
 
 ## Local files and recent projects
 

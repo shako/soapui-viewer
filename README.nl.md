@@ -1,18 +1,25 @@
 # SoapUI Viewer
 
-[English](README.md) · [Viewer downloaden](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)
+[English](README.md) · [Huidige versie downloaden (ZIP)](https://github.com/shako/soapui-viewer/archive/refs/heads/main.zip) · [Releases](https://github.com/shako/soapui-viewer/releases)
 
-Een lokale viewer voor **SoapUI XML-projecten**, met zoeken over meerdere projecten en een boom van project → testsuite → testcase → teststep. Voor gebruik is geen SoapUI-installatie, ReadyAPI, Node.js, server of internetverbinding nodig.
+Doorzoek grote **SoapUI XML-projecten** of vergelijk twee versies via een boom van project → testsuite → testcase → teststep. Een SoapUI-installatie of ReadyAPI-licentie is niet nodig.
 
 De interface is in het Engels. De onderstaande knopnamen komen overeen met de viewer.
 
+| Wat wil je doen? | Wat heb je nodig? |
+| --- | --- |
+| Projecten doorzoeken of twee XML-bestanden vergelijken | Open `dist/index.html` in je browser. Na het downloaden is geen installatie, server of internetverbinding nodig. |
+| Je werkbestand vergelijken met een Git-branch of tag | Download of clone deze repository, installeer Node.js 22+ en Git en start `npm run compare:git`. Bouwen of `npm install` is niet nodig. |
+
 ## Openen op je Mac
 
-1. Download **[SoapUI-Viewer.html](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)** en dubbelklik erop in Finder. Het bestand opent in je browser. Gebruik een recente Safari, Chrome, Edge of Firefox. Heb je de broncode gedownload, open dan `dist/index.html`.
+1. Download de **[huidige repository als ZIP](https://github.com/shako/soapui-viewer/archive/refs/heads/main.zip)**, pak hem uit en dubbelklik op `dist/index.html` in Finder. Of clone de repository en open hetzelfde bestand. Gebruik een recente Safari, Chrome, Edge of Firefox.
 2. Sleep één of meerdere volledige SoapUI XML-projecten op het venster, of kies **Open projects**.
 3. Typ bijvoorbeeld `CRL`. De boom toont de onderdelen met matches en hun bovenliggende projecten, suites en cases.
 4. Selecteer een onderdeel. Rechts zie je het volledige pad, het bronbestand en de velden waarin de term voorkomt. Selecteer bijvoorbeeld `config / script` voor een Groovy-script.
 5. Gebruik **Show all … steps** om ook de stappen zonder match in die testcase te zien. Die blijven selecteerbaar voor context. Met **Include fields without matches** bekijk je de overige inhoud van een onderdeel.
+
+De ZIP staat ook onder **Code → Download ZIP** op GitHub. De losse **[SoapUI-Viewer.html-release](https://github.com/shako/soapui-viewer/releases/latest/download/SoapUI-Viewer.html)** kan achterlopen op `main` en nieuwere functies missen. Gebruik `dist/index.html` uit de repository voor de functies in deze handleiding. De bestandsweergave op GitHub toont de HTML-broncode; download het bestand om het te gebruiken.
 
 Met **Search in** beperk je de zoekactie tot **All text**, **Names** (namen van projecten, suites, cases en steps), **Properties** (custom propertynamen en -waarden op projecten, suites, cases en in stepconfiguraties) of **Content** (scripts, requests en overige velden, behalve die namen en properties). De boom, aantallen en markeringen volgen dezelfde filter. Andere velden blijven bereikbaar via **Include fields without matches**.
 
@@ -36,7 +43,7 @@ Bij hover verschijnt **Copy** om de volledige naam te kopiëren, zonder de selec
 
 ## Twee versies vergelijken
 
-De huidige broncode en lokale `dist/index.html` bevatten de nieuwe modus **Compare**, naast **Viewer**. Een eerder gedownloade release kan nog ouder zijn.
+Open `dist/index.html` voor **Viewer** en **Compare** in hetzelfde HTML-bestand. Voor twee XML-bestanden die je op schijf kiest, is de Git-helper niet nodig.
 
 1. Open **Compare**. Instellingen, filters en aantallen staan in de linkerkolom; rechts krijgt de XML-diff de beschikbare hoogte. Sleep één volledig XML-project op **Before** en één op **After**. Met **Choose local XML** kan het ook. Controleer de bestandsnamen; **⇄** wisselt de twee kanten.
 2. Klik **Compare**. **Comparison setup** klapt daarna automatisch dicht; klik erop om opnieuw versies te kiezen. Standaard staat **Only changes** aan: je ziet alleen gewijzigde takken. Zet dit uit om ook ongewijzigde onderdelen te bekijken.
@@ -54,7 +61,9 @@ De schaaltest vergelijkt twee synthetische bestanden van elk **27,9 MiB**, met 1
 
 ## Git-versies vergelijken (optioneel)
 
-Start de lokale Git-helper vanuit de SoapUI Viewer-repositorymap:
+Hiervoor heb je **Node.js 22+, Git en een clone of ZIP van deze repository** nodig. Alleen het losse HTML-bestand volstaat niet voor Git-toegang. Bouwen of `npm install` is niet nodig.
+
+Open een terminal in de **applicatiemap van SoapUI Viewer**, waar `package.json` staat. Dit is een andere map dan de Git-repository met je SoapUI-projecten, die je daarna kiest. Start de lokale Git-helper:
 
 ```sh
 npm run compare:git
@@ -66,10 +75,10 @@ De browser opent de vergelijker. Vul bij **Git repository folder** jouw Git-map 
 npm run compare:git -- "/volledig/pad/naar/jouw-gitmap"
 ```
 
-Hiervoor zijn **Node.js 22+ en Git** nodig. Met de meegeleverde HTML hoef je niet te builden of `npm install` uit te voeren. Een XML-bestand als startargument blijft ook werken en selecteert dat bestand vooraf.
+Een XML-bestand als startargument blijft ook werken en selecteert dat bestand vooraf.
 
 1. Kies onder **Current working copy** met **Choose working file** je SoapUI XML. Dit gebruikt je uitgecheckte branch, inclusief opgeslagen, niet-gecommitte wijzigingen. Een relatief repositorypad invoeren kan ook.
-2. Kies onder **Compare with** een andere **Branch**. Typ in de dropdown om te zoeken. Hetzelfde relatieve bestandspad wordt automatisch gebruikt, zonder checkout. HEAD en tags zijn ook beschikbaar. Vanuit een featurebranch wordt main/master vooraf gekozen indien beschikbaar, anders HEAD.
+2. Kies onder **Compare with** een andere **Branch**. Typ in de dropdown om te zoeken. Hetzelfde relatieve bestandspad wordt automatisch gebruikt, zonder checkout. HEAD en tags zijn ook beschikbaar.
 3. Wil je op die branch een ander bestand, klik dan **Choose a different file**. Je werkbestand blijft behouden. **Use the working file path again** herstelt het standaardpad. Ontbreekt één bestand, dan stopt de vergelijking met een melding van de versie, het pad en de repository. Kies een andere branch/ander bestand of open de juiste repository; een ontbrekend bestand wordt nooit als een leeg project behandeld.
 4. Klik **Compare**. De branchversie is Before en de werkversie is After. De ingelezen Git-versies tonen hun commit-hash in de instellingen.
 
@@ -107,11 +116,16 @@ Deze opslag hoort bij de browser en de locatie van de viewer. Een andere browser
 
 De XML-parser leest bestanden in blokken van 256 KiB in een Web Worker. De inhoud blijft in die worker; de interface ontvangt alleen structuur, zoekresultaten en het gekozen tekstfragment. De boom toont alleen de rijen rond het zichtbare venster.
 
-De automatische schaaltest opent twee gegenereerde projecten van elk 29,7 MiB (circa 31 MB), samen 24.000 steps, en controleert alle 2.400 verwachte zoekmatches en hun paden. Dit is een functionele test in Node.js, geen gemeten browserprestatie of test van jouw klantproject. Geheugengebruik hangt af van de inhoud en is groter dan de bestandsgrootte; er is geen harde bestandsgroottelimiet ingebouwd.
+De automatische schaaltest opent twee gegenereerde projecten van elk 29,7 MiB (circa 31 MB), samen 24.000 steps, en controleert alle 2.400 verwachte zoekmatches en hun paden. Dit is een functionele test in Node.js, geen gemeten browserprestatie of test van jouw klantproject. Geheugengebruik hangt af van de inhoud en is groter dan de bestandsgrootte. Handmatig openen heeft geen ingebouwde bestandsgroottelimiet; de Git-helper accepteert bestanden tot 256 MiB.
 
-## Delen
+## Delen en bijwerken
 
-Geef alleen **`dist/index.html`** door. Je mag het bestand hernoemen naar bijvoorbeeld **`SoapUI Viewer.html`**. Alle benodigde code en de licenties van meegeleverde bibliotheken zitten erin. De klantprojecten en recente lijst zitten uitsluitend in jouw browseropslag en worden niet in het gedeelde HTML-bestand opgenomen.
+- Voor zoeken en het vergelijken van twee XML-bestanden geef je **`dist/index.html`** door. Hernoemen naar bijvoorbeeld **`SoapUI-Viewer.html`** mag. Alle benodigde code en licenties zitten erin; geopende projecten en historiek worden niet in het gedeelde HTML-bestand opgenomen.
+- Voor Git-vergelijkingen deel je de [repositorylink](https://github.com/shako/soapui-viewer). Elke collega downloadt of clonet de repository en start zelf de helper met de instructies hierboven. Jouw `127.0.0.1`- of `localhost`-link werkt alleen op jouw computer. Iedereen kiest zijn eigen lokale Git-repository; projectbestanden worden niet geüpload.
+
+Werk een clone bij met `git pull --ff-only` in de applicatiemap van de viewer. Gebruik je een ZIP, download en pak dan een nieuwe kopie van `main` uit. `dist/index.html` is al gebouwd. Open de HTML opnieuw, of stop de draaiende Git-helper met **Ctrl+C** en start opnieuw met `npm run compare:git`. Alleen de oude helperpagina verversen laadt de nieuwe build niet.
+
+De repositoryhistoriek hoort bij die kopie van de viewer. Een nieuwe ZIP in een andere map begint met een eigen historiek. Bewaar `.soapui-viewer/repositories.json` in je applicatiemap als je die bij het bijwerken wilt behouden.
 
 De broncode en releases staan op [GitHub](https://github.com/shako/soapui-viewer). Gebruik voor eventuele lokale klantbestanden de genegeerde map `private-projects/`. Deel geen klantprojecten of gevoelige gegevens in publieke issues of pull requests.
 
@@ -122,10 +136,9 @@ Voor ontwikkeling en de optionele Git-starter is Node.js 22 of hoger nodig. Om z
 ```sh
 npm ci
 npm test
-npm run build
 ```
 
-De uitvoer is opnieuw één zelfstandig bestand: `dist/index.html`. De runtime gebruikt saxes 6.0.0, xmlchars 2.2.0 en jsdiff 8.0.4; esbuild is uitsluitend een bouwafhankelijkheid.
+`npm test` bouwt eerst `dist/index.html` en voert daarna de tests uit. Met `npm run build` bouw je alleen de HTML opnieuw. Commit die mee wanneer de broncode verandert; CI controleert dat beide overeenkomen. De runtime gebruikt saxes 6.0.0, xmlchars 2.2.0 en jsdiff 8.0.4; esbuild is uitsluitend een bouwafhankelijkheid.
 
 `src/core.js` bevat de parser en zoeklogica; `src/worker.js` de achtergrondtaak; `src/app.js` de interface; `src/recents.js` de recente bestanden; `src/splitter.js` de kolombreedte. De tests controleren onder andere namespaces, streaming, encodings, CDATA, correcte toewijzing aan suites/cases/steps, grote bestanden en de worker in het gebouwde HTML-bestand. De recente opslag wordt getest met fake-indexeddb (alleen een testafhankelijkheid), inclusief heropenen in een nieuwe sessie, bewaren van een kopie groter dan 23 MB, deduplicatie en verwijderen. Browserafhankelijke toestemming voor originele bestanden is getest met gesimuleerde handles; daadwerkelijke browserrechten zijn niet automatisch geverifieerd.
 
